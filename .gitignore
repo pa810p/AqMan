@@ -190,3 +190,6 @@ __marimo__/
 *.sqlite3
 *.sqlite3-*
 logs/
+
+# Local planning notes
+/Plan.md
