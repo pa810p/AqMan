@@ -66,7 +66,7 @@ class Aquarium(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    measurement_sessions: Mapped[list["MeasurementSession"]] = relationship(
+    measurements: Mapped[list["Measurement"]] = relationship(
         back_populates="aquarium", cascade="all, delete-orphan"
     )
     notes: Mapped[list["Note"]] = relationship(back_populates="aquarium", cascade="all, delete-orphan")
@@ -86,35 +86,20 @@ class Parameter(Base):
     measurements: Mapped[list["Measurement"]] = relationship(back_populates="parameter")
 
 
-class MeasurementSession(Base):
-    __tablename__ = "measurement_sessions"
-    __table_args__ = (Index("ix_measurement_sessions_aquarium_timestamp", "aquarium_id", "timestamp"),)
+class Measurement(Base):
+    __tablename__ = "measurements"
+    __table_args__ = (Index("ix_measurements_aquarium_timestamp", "aquarium_id", "timestamp"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     aquarium_id: Mapped[int] = mapped_column(
         ForeignKey("aquariums.id", ondelete="CASCADE"), nullable=False
     )
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    general_note: Mapped[str | None] = mapped_column(Text)
-
-    aquarium: Mapped[Aquarium] = relationship(back_populates="measurement_sessions")
-    measurements: Mapped[list["Measurement"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan"
-    )
-
-
-class Measurement(Base):
-    __tablename__ = "measurements"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("measurement_sessions.id", ondelete="CASCADE"), nullable=False
-    )
     parameter_id: Mapped[int] = mapped_column(ForeignKey("parameters.id"), nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
 
-    session: Mapped[MeasurementSession] = relationship(back_populates="measurements")
+    aquarium: Mapped[Aquarium] = relationship(back_populates="measurements")
     parameter: Mapped[Parameter] = relationship(back_populates="measurements")
 
 

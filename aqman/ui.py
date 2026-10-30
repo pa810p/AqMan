@@ -884,7 +884,7 @@ def build_ui(
         }
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(t("edit_measurement_dialog")).classes("text-h6")
-            date_input, time_input = create_datetime_inputs(measurement.session.timestamp)
+            date_input, time_input = create_datetime_inputs(measurement.timestamp)
             parameter_input = ui.select(
                 parameter_options,
                 label=t("parameter"),

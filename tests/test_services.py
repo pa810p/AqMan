@@ -84,7 +84,7 @@ def test_aquarium_rejects_invalid_thumbnail(services) -> None:
         aquariums.create_aquarium("Reef", 120, None, b"not an image")
 
 
-def test_measurement_session_keeps_timezone_and_optional_parameters(services) -> None:
+def test_measurement_keeps_timezone_and_optional_parameters(services) -> None:
     aquariums, parameters, records = services
     aquarium = aquariums.create_aquarium("Nano", 35, None)
     nitrate = parameters.create_parameter("NO3", "mg/l", None)
@@ -99,10 +99,9 @@ def test_measurement_session_keeps_timezone_and_optional_parameters(services) ->
         None,
     )
 
-    [measurement_session] = records.measurement_sessions(aquarium.id)
-    assert measurement_session.timestamp == datetime(2026, 10, 30, 10, 0, tzinfo=timezone.utc)
-    assert len(measurement_session.measurements) == 1
-    assert measurement_session.measurements[0].parameter.name == "NO3"
+    [measurement] = records.measurements(aquarium.id)
+    assert measurement.timestamp == datetime(2026, 10, 30, 10, 0, tzinfo=timezone.utc)
+    assert measurement.parameter.name == "NO3"
     assert phosphate.id != nitrate.id
 
 
@@ -114,10 +113,9 @@ def test_measurement_can_be_edited_and_moved_to_another_day(services) -> None:
     original_timestamp = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
     updated_timestamp = datetime(2026, 10, 30, 10, 30, tzinfo=timezone.utc)
     records.record_measurement(aquarium.id, original_timestamp, ph.id, 6.8, None)
-    [original_session] = records.measurement_sessions(aquarium.id)
-    [original_measurement] = original_session.measurements
+    [original_measurement] = records.measurements(aquarium.id)
     loaded_measurement = records.get_measurement(aquarium.id, original_measurement.id)
-    assert loaded_measurement.session.timestamp == original_timestamp
+    assert loaded_measurement.timestamp == original_timestamp
     assert loaded_measurement.parameter.name == "pH"
 
     records.update_measurement(
@@ -129,10 +127,8 @@ def test_measurement_can_be_edited_and_moved_to_another_day(services) -> None:
         " Retested ",
     )
 
-    [updated_session] = records.measurement_sessions(aquarium.id)
-    [updated_measurement] = updated_session.measurements
-    assert updated_session.id == original_session.id
-    assert updated_session.timestamp == updated_timestamp
+    [updated_measurement] = records.measurements(aquarium.id)
+    assert updated_measurement.timestamp == updated_timestamp
     assert updated_measurement.id == original_measurement.id
     assert updated_measurement.parameter_id == nitrate.id
     assert updated_measurement.value == 12.5
@@ -149,8 +145,7 @@ def test_measurement_edit_is_scoped_to_its_aquarium(services) -> None:
     ph = parameters.create_parameter("pH", "—", None)
     timestamp = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
     records.record_measurement(aquarium.id, timestamp, ph.id, 6.8, None)
-    [measurement_session] = records.measurement_sessions(aquarium.id)
-    [measurement] = measurement_session.measurements
+    [measurement] = records.measurements(aquarium.id)
 
     with pytest.raises(NotFoundError):
         records.get_measurement(other_aquarium.id, measurement.id)
@@ -165,8 +160,8 @@ def test_measurement_edit_is_scoped_to_its_aquarium(services) -> None:
             None,
         )
 
-    [unchanged_session] = records.measurement_sessions(aquarium.id)
-    assert unchanged_session.measurements[0].value == 6.8
+    [unchanged_measurement] = records.measurements(aquarium.id)
+    assert unchanged_measurement.value == 6.8
 
 
 def test_notes_and_water_changes_are_saved_separately(services) -> None:
@@ -377,9 +372,12 @@ def test_alembic_upgrade_creates_initial_schema(tmp_path: Path) -> None:
         "alembic_version",
         "aquariums",
         "parameters",
-        "measurement_sessions",
         "measurements",
         "notes",
         "water_changes",
     } <= table_names
+    assert "measurement_sessions" not in table_names
+    measurement_columns = {column["name"] for column in inspect(engine).get_columns("measurements")}
+    assert {"aquarium_id", "timestamp"} <= measurement_columns
+    assert "session_id" not in measurement_columns
     assert "thumbnail_data" in aquarium_columns

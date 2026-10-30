@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session, selectinload
 from aqman.models import (
     Aquarium,
     Measurement,
-    MeasurementSession,
     Note,
     Parameter,
     WaterChange,
@@ -45,17 +44,17 @@ def add_aquarium(
 
 
 def list_dashboard_aquariums(session: Session) -> list[tuple[Aquarium, datetime | None]]:
-    latest_sessions = (
+    latest_measurements = (
         select(
-            MeasurementSession.aquarium_id,
-            func.max(MeasurementSession.timestamp).label("last_measurement_at"),
+            Measurement.aquarium_id,
+            func.max(Measurement.timestamp).label("last_measurement_at"),
         )
-        .group_by(MeasurementSession.aquarium_id)
+        .group_by(Measurement.aquarium_id)
         .subquery()
     )
     statement = (
-        select(Aquarium, latest_sessions.c.last_measurement_at)
-        .outerjoin(latest_sessions, latest_sessions.c.aquarium_id == Aquarium.id)
+        select(Aquarium, latest_measurements.c.last_measurement_at)
+        .outerjoin(latest_measurements, latest_measurements.c.aquarium_id == Aquarium.id)
         .where(Aquarium.active.is_(True))
         .order_by(Aquarium.name, Aquarium.id)
     )
@@ -83,31 +82,25 @@ def add_parameter(
     return parameter
 
 
-def add_measurement_session(
+def add_measurement(
     session: Session,
     *,
     aquarium_id: int,
     timestamp: datetime,
-    general_note: str | None,
-    values: dict[int, tuple[float, str | None]],
-) -> MeasurementSession:
-    measurement_session = MeasurementSession(
+    parameter_id: int,
+    value: float,
+    note: str | None,
+) -> Measurement:
+    measurement = Measurement(
         aquarium_id=aquarium_id,
         timestamp=timestamp,
-        general_note=general_note,
+        parameter_id=parameter_id,
+        value=value,
+        note=note,
     )
-    session.add(measurement_session)
+    session.add(measurement)
     session.flush()
-    for parameter_id, (value, note) in values.items():
-        session.add(
-            Measurement(
-                session_id=measurement_session.id,
-                parameter_id=parameter_id,
-                value=value,
-                note=note,
-            )
-        )
-    return measurement_session
+    return measurement
 
 
 def get_measurement(
@@ -117,25 +110,21 @@ def get_measurement(
 ) -> Measurement | None:
     statement = (
         select(Measurement)
-        .join(MeasurementSession)
         .where(
             Measurement.id == measurement_id,
-            MeasurementSession.aquarium_id == aquarium_id,
+            Measurement.aquarium_id == aquarium_id,
         )
-        .options(
-            selectinload(Measurement.parameter),
-            selectinload(Measurement.session),
-        )
+        .options(selectinload(Measurement.parameter))
     )
     return session.scalar(statement)
 
 
-def list_measurement_sessions(session: Session, aquarium_id: int) -> list[MeasurementSession]:
+def list_measurements(session: Session, aquarium_id: int) -> list[Measurement]:
     statement = (
-        select(MeasurementSession)
-        .where(MeasurementSession.aquarium_id == aquarium_id)
-        .options(selectinload(MeasurementSession.measurements).selectinload(Measurement.parameter))
-        .order_by(MeasurementSession.timestamp.desc(), MeasurementSession.id.desc())
+        select(Measurement)
+        .where(Measurement.aquarium_id == aquarium_id)
+        .options(selectinload(Measurement.parameter))
+        .order_by(Measurement.timestamp.desc(), Measurement.id.desc())
     )
     return list(session.scalars(statement))
 

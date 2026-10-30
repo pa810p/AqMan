@@ -9,7 +9,6 @@ from aqman.logger import get_logger
 from aqman.models import (
     Aquarium,
     Measurement,
-    MeasurementSession,
     Note,
     Parameter,
     WaterChange,
@@ -202,11 +201,11 @@ class RecordService:
                 raise NotFoundError("Measurement not found.")
             return measurement
 
-    def measurement_sessions(self, aquarium_id: int) -> list[MeasurementSession]:
+    def measurements(self, aquarium_id: int) -> list[Measurement]:
         with self._session_factory() as session:
             if repositories.get_aquarium(session, aquarium_id) is None:
                 raise NotFoundError("Aquarium not found.")
-            return repositories.list_measurement_sessions(session, aquarium_id)
+            return repositories.list_measurements(session, aquarium_id)
 
     def daily_history(self, aquarium_id: int) -> list[DailyAquariumHistory]:
         with self._session_factory() as session:
@@ -214,15 +213,14 @@ class RecordService:
                 raise NotFoundError("Aquarium not found.")
 
             measurements_by_day: dict[date, dict[int, list[Measurement]]] = {}
-            for measurement_session in sorted(
-                repositories.list_measurement_sessions(session, aquarium_id),
+            for measurement in sorted(
+                repositories.list_measurements(session, aquarium_id),
                 key=lambda item: (item.timestamp, item.id),
             ):
-                day = measurement_session.timestamp.astimezone().date()
-                for measurement in measurement_session.measurements:
-                    measurements_by_day.setdefault(day, {}).setdefault(
-                        measurement.parameter_id, []
-                    ).append(measurement)
+                day = measurement.timestamp.astimezone().date()
+                measurements_by_day.setdefault(day, {}).setdefault(
+                    measurement.parameter_id, []
+                ).append(measurement)
 
             water_changes_by_day: dict[date, list[WaterChange]] = {}
             for water_change in repositories.list_water_changes(session, aquarium_id):
@@ -259,7 +257,7 @@ class RecordService:
         parameter_id: int,
         value: float,
         note: str | None,
-    ) -> MeasurementSession:
+    ) -> Measurement:
         clean_timestamp = _utc_datetime(timestamp)
         clean_value = _finite_number(value, "Measurement value")
         clean_note = _clean_optional_text(note)
@@ -268,20 +266,21 @@ class RecordService:
                 raise NotFoundError("Aquarium not found.")
             if repositories.get_parameter(session, parameter_id) is None:
                 raise NotFoundError("Selected parameter not found.")
-            measurement_session = repositories.add_measurement_session(
+            measurement = repositories.add_measurement(
                 session,
                 aquarium_id=aquarium_id,
                 timestamp=clean_timestamp,
-                general_note=None,
-                values={parameter_id: (clean_value, clean_note)},
+                parameter_id=parameter_id,
+                value=clean_value,
+                note=clean_note,
             )
         logger.info(
-            "Recorded measurement session id=%s aquarium_id=%s parameter_id=%s",
-            measurement_session.id,
+            "Recorded measurement id=%s aquarium_id=%s parameter_id=%s",
+            measurement.id,
             aquarium_id,
             parameter_id,
         )
-        return measurement_session
+        return measurement
 
     def update_measurement(
         self,
@@ -304,7 +303,7 @@ class RecordService:
             parameter = repositories.get_parameter(session, parameter_id)
             if parameter is None:
                 raise NotFoundError("Selected parameter not found.")
-            measurement.session.timestamp = clean_timestamp
+            measurement.timestamp = clean_timestamp
             measurement.parameter = parameter
             measurement.value = clean_value
             measurement.note = clean_note

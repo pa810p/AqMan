@@ -59,22 +59,16 @@ Definicje parametrów wody:
 
 Nie zakładać, że wszystkie akwaria mają identyczny zestaw mierzonych parametrów.
 
-### MeasurementSession
-Reprezentuje zapis konkretnego pomiaru w konkretnym akwarium:
-- id
-- aquarium_id
-- timestamp
-- general_note (opcjonalnie)
-
 ### Measurement
 Pojedynczy wynik pomiaru:
 - id
-- session_id
+- aquarium_id
+- timestamp
 - parameter_id
 - value
 - note (opcjonalnie)
 
-W MVP formularz zapisuje jeden parametr i jedną wartość na raz. Wewnętrzny rekord MeasurementSession grupuje pojedynczy pomiar; drugi parametr można od razu zapisać osobno z osobnym timestampem.
+W MVP formularz zapisuje jeden parametr i jedną wartość na raz. Każdy pomiar przechowuje identyfikator akwarium, timestamp i opcjonalną notatkę.
 
 ### Note
 - id
