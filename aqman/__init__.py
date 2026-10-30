@@ -1,0 +1,2 @@
+"""Aquarium Manager application package."""
+
