@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 
 from aqman.services import ValidationError
-from aqman.ui import _local_datetime_parts, _parse_local_datetime
+from aqman.ui import _format_datetime, _local_datetime_parts, _parse_local_datetime
 
 
 def test_local_datetime_parts_use_24_hour_time() -> None:
@@ -22,11 +22,18 @@ def test_parse_local_datetime_converts_local_time_to_utc() -> None:
     assert _parse_local_datetime("2026-10-30", "17:35") == expected
 
 
+def test_format_datetime_uses_iso_date_order() -> None:
+    value = datetime(2026, 10, 30, 17, 35, tzinfo=timezone.utc)
+
+    assert _format_datetime(value, "en") == value.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
 @pytest.mark.parametrize(
     ("date_value", "time_value"),
     [
         ("", "17:35"),
         ("2026-10-30", ""),
+        ("30-10-2026", "17:35"),
         ("2026-10-30", "25:00"),
         ("2026-02-30", "17:35"),
     ],

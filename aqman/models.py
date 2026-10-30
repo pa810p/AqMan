@@ -75,6 +75,10 @@ class Aquarium(Base):
     water_changes: Mapped[list["WaterChange"]] = relationship(
         back_populates="aquarium", cascade="all, delete-orphan"
     )
+    fertilizer_applications: Mapped[list["FertilizerApplication"]] = relationship(
+        back_populates="aquarium",
+        cascade="all, delete-orphan",
+    )
 
 
 class Parameter(Base):
@@ -139,6 +143,37 @@ class FertilizerEffect(Base):
 
     fertilizer: Mapped[Fertilizer] = relationship(back_populates="effects")
     parameter: Mapped[Parameter] = relationship(back_populates="fertilizer_effects")
+
+
+class FertilizerApplication(Base):
+    __tablename__ = "fertilizer_applications"
+    __table_args__ = (
+        CheckConstraint(
+            "actual_dose_ml > 0",
+            name="ck_fertilizer_applications_dose_positive",
+        ),
+        Index(
+            "ix_fertilizer_applications_aquarium_timestamp",
+            "aquarium_id",
+            "timestamp",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    aquarium_id: Mapped[int] = mapped_column(
+        ForeignKey("aquariums.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    fertilizer_id: Mapped[int] = mapped_column(
+        ForeignKey("fertilizers.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    actual_dose_ml: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    aquarium: Mapped[Aquarium] = relationship(back_populates="fertilizer_applications")
+    fertilizer: Mapped[Fertilizer] = relationship()
 
 
 class Measurement(Base):

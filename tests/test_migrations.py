@@ -63,6 +63,10 @@ def test_measurement_session_data_migrates_to_direct_measurements(tmp_path: Path
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
     measurement_columns = {column["name"] for column in inspector.get_columns("measurements")}
+    application_foreign_keys = {
+        tuple(foreign_key["constrained_columns"]): foreign_key["options"]
+        for foreign_key in inspector.get_foreign_keys("fertilizer_applications")
+    }
     with engine.connect() as connection:
         measurements = connection.execute(
             text(
@@ -77,6 +81,9 @@ def test_measurement_session_data_migrates_to_direct_measurements(tmp_path: Path
     engine.dispose()
 
     assert "measurement_sessions" not in table_names
+    assert "fertilizer_applications" in table_names
+    assert application_foreign_keys[("aquarium_id",)]["ondelete"] == "CASCADE"
+    assert application_foreign_keys[("fertilizer_id",)]["ondelete"] == "RESTRICT"
     assert {"aquarium_id", "timestamp"} <= measurement_columns
     assert "session_id" not in measurement_columns
     assert [row[0] for row in measurements] == [1, 1]
@@ -98,5 +105,6 @@ def test_measurement_session_data_migrates_to_direct_measurements(tmp_path: Path
     engine.dispose()
 
     assert "measurement_sessions" in downgraded_tables
+    assert "fertilizer_applications" not in downgraded_tables
     assert len(downgraded_measurements) == 2
     assert len(set(downgraded_measurements)) == 2

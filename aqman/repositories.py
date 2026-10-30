@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from aqman.models import (
     Aquarium,
     Fertilizer,
+    FertilizerApplication,
     FertilizerEffect,
     Measurement,
     Note,
@@ -109,6 +110,72 @@ def get_fertilizer(session: Session, fertilizer_id: int) -> Fertilizer | None:
         )
     )
     return session.scalar(statement)
+
+
+def fertilizer_has_applications(session: Session, fertilizer_id: int) -> bool:
+    statement = (
+        select(FertilizerApplication.id)
+        .where(FertilizerApplication.fertilizer_id == fertilizer_id)
+        .limit(1)
+    )
+    return session.scalar(statement) is not None
+
+
+def add_fertilizer_application(
+    session: Session,
+    *,
+    aquarium_id: int,
+    timestamp: datetime,
+    fertilizer_id: int,
+    actual_dose_ml: float,
+    notes: str | None,
+) -> FertilizerApplication:
+    application = FertilizerApplication(
+        aquarium_id=aquarium_id,
+        timestamp=timestamp,
+        fertilizer_id=fertilizer_id,
+        actual_dose_ml=actual_dose_ml,
+        notes=notes,
+    )
+    session.add(application)
+    session.flush()
+    return application
+
+
+def get_fertilizer_application(
+    session: Session,
+    aquarium_id: int,
+    application_id: int,
+) -> FertilizerApplication | None:
+    statement = (
+        select(FertilizerApplication)
+        .where(
+            FertilizerApplication.aquarium_id == aquarium_id,
+            FertilizerApplication.id == application_id,
+        )
+        .options(selectinload(FertilizerApplication.fertilizer))
+    )
+    return session.scalar(statement)
+
+
+def list_fertilizer_applications(
+    session: Session,
+    aquarium_id: int,
+) -> list[FertilizerApplication]:
+    statement = (
+        select(FertilizerApplication)
+        .where(FertilizerApplication.aquarium_id == aquarium_id)
+        .options(selectinload(FertilizerApplication.fertilizer))
+        .order_by(FertilizerApplication.timestamp.desc(), FertilizerApplication.id.desc())
+    )
+    return list(session.scalars(statement))
+
+
+def delete_fertilizer_application(
+    session: Session,
+    application: FertilizerApplication,
+) -> None:
+    session.delete(application)
 
 
 def get_parameters_by_ids(session: Session, parameter_ids: set[int]) -> list[Parameter]:

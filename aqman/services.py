@@ -10,6 +10,7 @@ from aqman.logger import get_logger
 from aqman.models import (
     Aquarium,
     Fertilizer,
+    FertilizerApplication,
     Measurement,
     Note,
     Parameter,
@@ -40,6 +41,7 @@ class DailyAquariumHistory:
     measurements: dict[int, tuple[Measurement, ...]]
     water_changes: tuple[WaterChange, ...]
     notes: tuple[Note, ...]
+    fertilizer_applications: tuple[FertilizerApplication, ...]
 
 
 def _clean_optional_text(value: str | None) -> str | None:
@@ -269,6 +271,8 @@ class FertilizerService:
             fertilizer = repositories.get_fertilizer(session, fertilizer_id)
             if fertilizer is None:
                 raise NotFoundError("Fertilizer not found.")
+            if repositories.fertilizer_has_applications(session, fertilizer_id):
+                raise ValidationError("Fertilizer has application history.")
             session.delete(fertilizer)
         logger.info("Deleted fertilizer id=%s", fertilizer_id)
 
@@ -374,7 +378,22 @@ class RecordService:
             for notes in notes_by_day.values():
                 notes.sort(key=lambda item: (item.timestamp, item.id))
 
-            days = measurements_by_day.keys() | water_changes_by_day.keys() | notes_by_day.keys()
+            applications_by_day: dict[date, list[FertilizerApplication]] = {}
+            for application in repositories.list_fertilizer_applications(
+                session,
+                aquarium_id,
+            ):
+                day = application.timestamp.astimezone().date()
+                applications_by_day.setdefault(day, []).append(application)
+            for applications in applications_by_day.values():
+                applications.sort(key=lambda item: (item.timestamp, item.id))
+
+            days = (
+                measurements_by_day.keys()
+                | water_changes_by_day.keys()
+                | notes_by_day.keys()
+                | applications_by_day.keys()
+            )
             return [
                 DailyAquariumHistory(
                     day=day,
@@ -384,9 +403,139 @@ class RecordService:
                     },
                     water_changes=tuple(water_changes_by_day.get(day, ())),
                     notes=tuple(notes_by_day.get(day, ())),
+                    fertilizer_applications=tuple(applications_by_day.get(day, ())),
                 )
                 for day in sorted(days, reverse=True)
             ]
+
+    def add_fertilizer_application(
+        self,
+        aquarium_id: int,
+        timestamp: datetime,
+        fertilizer_id: int,
+        actual_dose_ml: float,
+        notes: str | None,
+    ) -> FertilizerApplication:
+        clean_timestamp = _utc_datetime(timestamp)
+        actual_dose = _positive_number(actual_dose_ml, "Actual fertilizer dose")
+        clean_notes = _clean_optional_text(notes)
+        if clean_notes is not None and len(clean_notes) > 10000:
+            raise ValidationError("Fertilizer notes must be at most 10000 characters.")
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            if repositories.get_fertilizer(session, fertilizer_id) is None:
+                raise NotFoundError("Selected fertilizer not found.")
+            application = repositories.add_fertilizer_application(
+                session,
+                aquarium_id=aquarium_id,
+                timestamp=clean_timestamp,
+                fertilizer_id=fertilizer_id,
+                actual_dose_ml=actual_dose,
+                notes=clean_notes,
+            )
+            loaded_application = repositories.get_fertilizer_application(
+                session,
+                aquarium_id,
+                application.id,
+            )
+            assert loaded_application is not None
+            application = loaded_application
+        logger.info(
+            "Recorded fertilizer application id=%s aquarium_id=%s fertilizer_id=%s",
+            application.id,
+            aquarium_id,
+            fertilizer_id,
+        )
+        return application
+
+    def get_fertilizer_application(
+        self,
+        aquarium_id: int,
+        application_id: int,
+    ) -> FertilizerApplication:
+        with self._session_factory() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            application = repositories.get_fertilizer_application(
+                session,
+                aquarium_id,
+                application_id,
+            )
+            if application is None:
+                raise NotFoundError("Fertilizer application not found.")
+            return application
+
+    def update_fertilizer_application(
+        self,
+        aquarium_id: int,
+        application_id: int,
+        timestamp: datetime,
+        fertilizer_id: int,
+        actual_dose_ml: float,
+        notes: str | None,
+    ) -> FertilizerApplication:
+        clean_timestamp = _utc_datetime(timestamp)
+        actual_dose = _positive_number(actual_dose_ml, "Actual fertilizer dose")
+        clean_notes = _clean_optional_text(notes)
+        if clean_notes is not None and len(clean_notes) > 10000:
+            raise ValidationError("Fertilizer notes must be at most 10000 characters.")
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            application = repositories.get_fertilizer_application(
+                session,
+                aquarium_id,
+                application_id,
+            )
+            if application is None:
+                raise NotFoundError("Fertilizer application not found.")
+            fertilizer = repositories.get_fertilizer(session, fertilizer_id)
+            if fertilizer is None:
+                raise NotFoundError("Selected fertilizer not found.")
+            application.timestamp = clean_timestamp
+            application.fertilizer = fertilizer
+            application.actual_dose_ml = actual_dose
+            application.notes = clean_notes
+            session.flush()
+            loaded_application = repositories.get_fertilizer_application(
+                session,
+                aquarium_id,
+                application_id,
+            )
+            assert loaded_application is not None
+            application = loaded_application
+        logger.info(
+            "Updated fertilizer application id=%s aquarium_id=%s fertilizer_id=%s",
+            application_id,
+            aquarium_id,
+            fertilizer_id,
+        )
+        return application
+
+    def delete_fertilizer_application(self, aquarium_id: int, application_id: int) -> None:
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            application = repositories.get_fertilizer_application(
+                session,
+                aquarium_id,
+                application_id,
+            )
+            if application is None:
+                raise NotFoundError("Fertilizer application not found.")
+            repositories.delete_fertilizer_application(session, application)
+        logger.info(
+            "Deleted fertilizer application id=%s aquarium_id=%s",
+            application_id,
+            aquarium_id,
+        )
+
+    def fertilizer_applications(self, aquarium_id: int) -> list[FertilizerApplication]:
+        with self._session_factory() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            return repositories.list_fertilizer_applications(session, aquarium_id)
 
     def record_measurement(
         self,

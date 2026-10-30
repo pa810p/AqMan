@@ -8,7 +8,12 @@ from nicegui.events import UploadEventArguments
 
 from aqman.images import MAX_IMAGE_SIZE_BYTES
 from aqman.logger import get_logger
-from aqman.models import Aquarium, Fertilizer, WaterChange, WaterSource
+from aqman.fertilizer_calculations import (
+    calculate_predicted_effects,
+    calculate_recommended_dose_ml,
+    net_volume_liters,
+)
+from aqman.models import Aquarium, Fertilizer, FertilizerApplication, WaterChange, WaterSource
 from aqman.services import (
     AquariumService,
     FertilizerService,
@@ -165,6 +170,7 @@ def build_ui(
 ) -> None:
     if language not in LANGUAGE_NAMES:
         language = "en"
+    ui.context.client.page.language = "en-US" if language == "en" else "pl"
 
     def t(key: str, **values: object) -> str:
         return translate(language, key, **values)
@@ -175,7 +181,19 @@ def build_ui(
             date_input = ui.input(
                 t("date"),
                 value=date_value,
-            ).props("type=date").classes("min-w-0 flex-1")
+                placeholder=t("date_format_hint"),
+            ).props('mask="####-##-##"').classes("min-w-0 flex-1")
+            with date_input.add_slot("append"):
+                with ui.menu().props("no-parent-event") as date_menu:
+                    date_picker = ui.date(
+                        value=date_value,
+                        mask="YYYY-MM-DD",
+                    )
+                ui.icon("event").classes("cursor-pointer").on(
+                    "click",
+                    lambda: date_menu.open(),
+                )
+            date_picker.bind_value(date_input)
             time_input = ui.input(
                 t("time"),
                 value=time_value,
@@ -259,6 +277,50 @@ def build_ui(
                         )
 
                     with ui.card().classes("w-full"):
+                        ui.label(t("new_fertilizer_application")).classes("text-h6")
+                        fertilizer_application_date, fertilizer_application_time = (
+                            create_datetime_inputs()
+                        )
+                        fertilizer_application_fertilizer = ui.select(
+                            {},
+                            label=t("fertilizer"),
+                        ).classes("w-full")
+                        fertilizer_target_parameter = ui.select(
+                            {},
+                            label=t("fertilizer_target_parameter"),
+                        ).classes("w-full")
+                        fertilizer_target_increase = ui.number(
+                            t("fertilizer_target_increase"),
+                            value=5,
+                            min=0.1,
+                        ).classes("w-full")
+                        fertilizer_recommended_dose = ui.label(
+                            t("fertilizer_dose_unavailable")
+                        ).classes("text-body2")
+                        fertilizer_actual_dose = ui.number(
+                            t("fertilizer_actual_dose"),
+                            min=0,
+                        ).classes("w-full")
+                        fertilizer_other_effects = ui.label(
+                            t("fertilizer_effects_unavailable")
+                        ).classes("text-body2")
+                        fertilizer_application_notes = ui.textarea(
+                            t("optional_note")
+                        ).classes("w-full")
+                        ui.button(
+                            t("save_fertilizer_application"),
+                            icon="save",
+                            on_click=lambda: save_fertilizer_application(),
+                        )
+
+                    with ui.card().classes("w-full"):
+                        ui.label(t("new_note")).classes("text-h6")
+                        note_date, note_time = create_datetime_inputs()
+                        note_category = ui.input(t("optional_category")).classes("w-full")
+                        note_content = ui.textarea(t("note_content")).classes("w-full")
+                        ui.button(t("save_note"), icon="save", on_click=lambda: save_note())
+
+                    with ui.card().classes("w-full"):
                         ui.label(t("new_water_change")).classes("text-h6")
                         water_change_date, water_change_time = create_datetime_inputs()
                         water_source = ui.select(
@@ -276,15 +338,6 @@ def build_ui(
                             icon="save",
                             on_click=lambda: save_water_change(),
                         )
-
-                    with ui.card().classes("w-full"):
-                        ui.label(t("new_note")).classes("text-h6")
-                        note_date, note_time = create_datetime_inputs()
-                        note_category = ui.input(t("optional_category")).classes("w-full")
-                        note_content = ui.textarea(t("note_content")).classes("w-full")
-                        ui.button(t("save_note"), icon="save", on_click=lambda: save_note())
-
-                    ui.card().classes("w-full min-h-48")
 
                     with ui.card().classes("w-full col-span-2"):
                         ui.label(t("activity_history")).classes("text-h6")
@@ -456,6 +509,8 @@ def build_ui(
                                 ),
                             )
 
+    fertilizer_cache: dict[int, Fertilizer] = {}
+
     def refresh_parameters() -> None:
         parameters = parameter_service.list_parameters()
         parameters_container.clear()
@@ -497,7 +552,24 @@ def build_ui(
                 ).classes("w-full")
 
     def refresh_fertilizers() -> None:
+        nonlocal fertilizer_cache
         fertilizers = fertilizer_service.list_fertilizers()
+        fertilizer_cache = {fertilizer.id: fertilizer for fertilizer in fertilizers}
+        fertilizer_options = {
+            fertilizer.id: fertilizer.name for fertilizer in fertilizers
+        }
+        try:
+            previous_fertilizer_id = int(fertilizer_application_fertilizer.value)
+        except (TypeError, ValueError):
+            previous_fertilizer_id = None
+        fertilizer_application_fertilizer.options = fertilizer_options
+        fertilizer_application_fertilizer.value = (
+            previous_fertilizer_id
+            if previous_fertilizer_id in fertilizer_options
+            else next(iter(fertilizer_options), None)
+        )
+        fertilizer_application_fertilizer.update()
+        refresh_fertilizer_application_parameters()
         fertilizers_container.clear()
         with fertilizers_container:
             if not fertilizers:
@@ -537,6 +609,146 @@ def build_ui(
                                     ppm=effect.ppm_per_dose,
                                 )
                             )
+
+    def refresh_fertilizer_application_parameters() -> None:
+        fertilizer = _selected_fertilizer_application_fertilizer()
+        effect_options = (
+            {
+                effect.parameter_id: (
+                    f"{effect.parameter.name} ({effect.parameter.unit})"
+                )
+                for effect in fertilizer.effects
+            }
+            if fertilizer is not None
+            else {}
+        )
+        try:
+            previous_parameter_id = int(fertilizer_target_parameter.value)
+        except (TypeError, ValueError):
+            previous_parameter_id = None
+        fertilizer_target_parameter.options = effect_options
+        fertilizer_target_parameter.value = (
+            previous_parameter_id
+            if previous_parameter_id in effect_options
+            else next(iter(effect_options), None)
+        )
+        fertilizer_target_parameter.update()
+        refresh_fertilizer_application_recommendation()
+
+    def _selected_fertilizer_application_fertilizer() -> Fertilizer | None:
+        try:
+            fertilizer_id = int(fertilizer_application_fertilizer.value)
+        except (TypeError, ValueError):
+            return None
+        return fertilizer_cache.get(fertilizer_id)
+
+    def refresh_fertilizer_application_recommendation() -> None:
+        fertilizer = _selected_fertilizer_application_fertilizer()
+        if fertilizer is None:
+            fertilizer_recommended_dose.text = t("fertilizer_dose_unavailable")
+            fertilizer_actual_dose.value = None
+            fertilizer_actual_dose.update()
+            refresh_fertilizer_application_effect_preview()
+            return
+        try:
+            aquarium_id = current_aquarium_id()
+            aquarium = next(
+                (
+                    item
+                    for item in aquarium_service.list_aquariums()
+                    if item.id == aquarium_id
+                ),
+                None,
+            )
+            if aquarium is None:
+                raise NotFoundError("Aquarium not found.")
+            target_parameter_id = int(fertilizer_target_parameter.value)
+            target_effect = next(
+                effect
+                for effect in fertilizer.effects
+                if effect.parameter_id == target_parameter_id
+            )
+            recommended_dose = calculate_recommended_dose_ml(
+                gross_volume_liters=aquarium.volume_liters,
+                dose_ml_per_100l=fertilizer.dose_ml_per_100l,
+                target_effect_ppm_per_dose=target_effect.ppm_per_dose,
+                target_increase_ppm=fertilizer_target_increase.value,
+            )
+            net_volume = net_volume_liters(aquarium.volume_liters)
+        except (StopIteration, TypeError, ValueError, ValidationError, NotFoundError):
+            fertilizer_recommended_dose.text = t("fertilizer_dose_unavailable")
+            fertilizer_actual_dose.value = None
+            fertilizer_actual_dose.update()
+            refresh_fertilizer_application_effect_preview()
+            return
+        fertilizer_recommended_dose.text = t(
+            "fertilizer_recommended_dose",
+            dose=recommended_dose,
+            net_volume=net_volume,
+        )
+        fertilizer_actual_dose.value = recommended_dose
+        fertilizer_actual_dose.update()
+        refresh_fertilizer_application_effect_preview()
+
+    def refresh_fertilizer_application_effect_preview() -> None:
+        fertilizer = _selected_fertilizer_application_fertilizer()
+        if fertilizer is None:
+            fertilizer_other_effects.text = t("fertilizer_effects_unavailable")
+            return
+        try:
+            aquarium_id = current_aquarium_id()
+            aquarium = next(
+                (
+                    item
+                    for item in aquarium_service.list_aquariums()
+                    if item.id == aquarium_id
+                ),
+                None,
+            )
+            if aquarium is None:
+                raise NotFoundError("Aquarium not found.")
+            predicted_effects = calculate_predicted_effects(
+                gross_volume_liters=aquarium.volume_liters,
+                dose_ml_per_100l=fertilizer.dose_ml_per_100l,
+                actual_dose_ml=fertilizer_actual_dose.value,
+                effects={
+                    effect.parameter_id: effect.ppm_per_dose
+                    for effect in fertilizer.effects
+                },
+            )
+            target_parameter_id = int(fertilizer_target_parameter.value)
+        except (TypeError, ValueError, ValidationError, NotFoundError):
+            fertilizer_other_effects.text = t("fertilizer_effects_unavailable")
+            return
+        remaining_effects = [
+            t(
+                "fertilizer_effect_line",
+                parameter=next(
+                    effect.parameter.name
+                    for effect in fertilizer.effects
+                    if effect.parameter_id == parameter_id
+                ),
+                ppm=ppm,
+            )
+            for parameter_id, ppm in predicted_effects.items()
+            if parameter_id != target_parameter_id
+        ]
+        fertilizer_other_effects.text = (
+            "; ".join(remaining_effects) if remaining_effects else t("no_other_fertilizer_effects")
+        )
+
+    fertilizer_application_fertilizer.on_value_change(
+        lambda _: refresh_fertilizer_application_parameters()
+    )
+    fertilizer_target_parameter.on_value_change(
+        lambda _: refresh_fertilizer_application_recommendation()
+    )
+    fertilizer_target_increase.on_value_change(
+        lambda _: refresh_fertilizer_application_recommendation()
+    )
+    fertilizer_actual_dose.on_value_change(
+        lambda _: refresh_fertilizer_application_effect_preview()
+    )
 
     def open_note_dialog(note_id: int) -> None:
         try:
@@ -625,6 +837,12 @@ def build_ui(
                     for parameter_id in parameter_ids
                 ],
                 {
+                    "name": "fertilizer_applications",
+                    "label": t("history_fertilizer_applications"),
+                    "field": "fertilizer_applications",
+                    "align": "left",
+                },
+                {
                     "name": "water_changes",
                     "label": t("history_water_changes"),
                     "field": "water_changes",
@@ -648,6 +866,15 @@ def build_ui(
                     return f"{entry} ({water_change.description})"
                 return entry
 
+            def format_fertilizer_application(
+                application: FertilizerApplication,
+            ) -> str:
+                return t(
+                    "history_fertilizer_application_entry",
+                    name=application.fertilizer.name,
+                    dose=application.actual_dose_ml,
+                )
+
             rows = []
             for day in daily_history:
                 note_links = [
@@ -668,6 +895,15 @@ def build_ui(
                     for measurement in measurements
                     if measurement.note
                 )
+                note_links.extend(
+                    {
+                        "id": f"fertilizer-application-{application.id}",
+                        "preview": _note_preview(application.notes),
+                        "content": application.notes,
+                    }
+                    for application in day.fertilizer_applications
+                    if application.notes
+                )
                 row: dict[str, object] = {
                     "id": day.day.isoformat(),
                     "date": day.day.isoformat(),
@@ -677,6 +913,13 @@ def build_ui(
                             "label": format_water_change(water_change),
                         }
                         for water_change in day.water_changes
+                    ],
+                    "fertilizer_applications": [
+                        {
+                            "id": application.id,
+                            "label": format_fertilizer_application(application),
+                        }
+                        for application in day.fertilizer_applications
                     ],
                     "notes": note_links,
                 }
@@ -717,6 +960,27 @@ def build_ui(
                         "__EDIT_LABEL__", t("edit_measurement")
                     ),
                 )
+            history_table.add_slot(
+                "body-cell-fertilizer_applications",
+                """
+                <q-td :props="props">
+                    <span
+                        v-for="(application, index) in props.row.fertilizer_applications"
+                        :key="application.id"
+                    >
+                        <a
+                            href="#"
+                            class="text-primary underline cursor-pointer"
+                            @click.prevent="$parent.$emit('fertilizer-application-edit-click', application.id)"
+                        >
+                            {{ application.label }}
+                            <q-tooltip>__EDIT_LABEL__</q-tooltip>
+                        </a>
+                        <span v-if="index + 1 < props.row.fertilizer_applications.length">; </span>
+                    </span>
+                </q-td>
+                """.replace("__EDIT_LABEL__", t("edit_fertilizer_application")),
+            )
             history_table.add_slot(
                 "body-cell-water_changes",
                 """
@@ -760,7 +1024,7 @@ def build_ui(
             )
 
             def handle_note_edit(event) -> None:
-                note_type, separator, identifier = str(event.args).partition("-")
+                note_type, separator, identifier = str(event.args).rpartition("-")
                 if not separator:
                     _notify_error(NotFoundError("Note not found."))
                     return
@@ -773,6 +1037,8 @@ def build_ui(
                     open_note_dialog(record_id)
                 elif note_type == "measurement":
                     open_measurement_dialog(record_id)
+                elif note_type == "fertilizer-application":
+                    open_fertilizer_application_dialog(record_id)
                 else:
                     _notify_error(NotFoundError("Note not found."))
 
@@ -800,6 +1066,19 @@ def build_ui(
                 open_water_change_dialog(water_change_id)
 
             history_table.on("water-change-edit-click", handle_water_change_edit)
+
+            def handle_fertilizer_application_edit(event) -> None:
+                try:
+                    application_id = int(event.args)
+                except (TypeError, ValueError):
+                    _notify_error(NotFoundError("Fertilizer application not found."))
+                    return
+                open_fertilizer_application_dialog(application_id)
+
+            history_table.on(
+                "fertilizer-application-edit-click",
+                handle_fertilizer_application_edit,
+            )
 
     def refresh_all() -> None:
         refresh_dashboard()
@@ -1121,7 +1400,7 @@ def build_ui(
             def delete() -> None:
                 try:
                     fertilizer_service.delete_fertilizer(fertilizer_id)
-                except NotFoundError as error:
+                except (NotFoundError, ValidationError) as error:
                     _notify_error(error)
                     dialog.close()
                     refresh_fertilizers()
@@ -1189,6 +1468,99 @@ def build_ui(
             with ui.row().classes("justify-end"):
                 ui.button(t("cancel"), on_click=dialog.close).props("flat")
                 ui.button(t("save"), on_click=save, icon="save")
+        dialog.open()
+
+    def open_fertilizer_application_dialog(application_id: int) -> None:
+        try:
+            aquarium_id = current_aquarium_id()
+            application = record_service.get_fertilizer_application(
+                aquarium_id,
+                application_id,
+            )
+        except (ValidationError, NotFoundError) as error:
+            _notify_error(error)
+            return
+
+        fertilizers = fertilizer_service.list_fertilizers()
+        fertilizer_options = {
+            fertilizer.id: fertilizer.name for fertilizer in fertilizers
+        }
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
+            ui.label(t("edit_fertilizer_application")).classes("text-h6")
+            date_input, time_input = create_datetime_inputs(application.timestamp)
+            fertilizer_input = ui.select(
+                fertilizer_options,
+                label=t("fertilizer"),
+                value=application.fertilizer_id,
+            ).classes("w-full")
+            dose_input = ui.number(
+                t("fertilizer_actual_dose"),
+                value=application.actual_dose_ml,
+                min=0,
+            ).classes("w-full")
+            notes_input = ui.textarea(
+                t("optional_note"),
+                value=application.notes or "",
+            ).classes("w-full")
+
+            def save() -> None:
+                try:
+                    try:
+                        fertilizer_id = int(fertilizer_input.value)
+                    except (TypeError, ValueError) as error:
+                        raise ValidationError("Select a fertilizer first.") from error
+                    record_service.update_fertilizer_application(
+                        aquarium_id,
+                        application.id,
+                        _parse_local_datetime(date_input.value, time_input.value),
+                        fertilizer_id,
+                        dose_input.value,
+                        notes_input.value,
+                    )
+                except (ValidationError, NotFoundError) as error:
+                    _notify_error(error)
+                    return
+                dialog.close()
+                ui.notify(t("updated_fertilizer_application"), type="positive")
+                refresh_all()
+
+            def confirm_delete() -> None:
+                with ui.dialog() as confirmation, ui.card().classes("w-full max-w-md"):
+                    ui.label(t("confirm_delete_fertilizer_application"))
+
+                    def delete() -> None:
+                        try:
+                            record_service.delete_fertilizer_application(
+                                aquarium_id,
+                                application.id,
+                            )
+                        except (ValidationError, NotFoundError) as error:
+                            _notify_error(error)
+                            confirmation.close()
+                            return
+                        confirmation.close()
+                        dialog.close()
+                        ui.notify(t("deleted_fertilizer_application"), type="positive")
+                        refresh_all()
+
+                    with ui.row().classes("justify-end"):
+                        ui.button(t("cancel"), on_click=confirmation.close).props("flat")
+                        ui.button(
+                            t("delete_fertilizer_application"),
+                            icon="delete",
+                            on_click=delete,
+                        ).props("color=negative")
+                confirmation.open()
+
+            with ui.row().classes("w-full justify-between"):
+                ui.button(
+                    t("delete_fertilizer_application"),
+                    icon="delete",
+                    on_click=confirm_delete,
+                ).props("color=negative flat")
+                with ui.row().classes("justify-end"):
+                    ui.button(t("cancel"), on_click=dialog.close).props("flat")
+                    ui.button(t("save"), on_click=save, icon="save")
         dialog.open()
 
     def open_water_change_dialog(water_change_id: int) -> None:
@@ -1308,6 +1680,33 @@ def build_ui(
         water_description.value = ""
         reset_datetime_inputs(water_change_date, water_change_time)
         ui.notify(t("saved_water_change"), type="positive")
+        refresh_all()
+
+    def save_fertilizer_application() -> None:
+        try:
+            try:
+                fertilizer_id = int(fertilizer_application_fertilizer.value)
+            except (TypeError, ValueError) as error:
+                raise ValidationError("Select a fertilizer first.") from error
+            record_service.add_fertilizer_application(
+                current_aquarium_id(),
+                _parse_local_datetime(
+                    fertilizer_application_date.value,
+                    fertilizer_application_time.value,
+                ),
+                fertilizer_id,
+                fertilizer_actual_dose.value,
+                fertilizer_application_notes.value,
+            )
+        except (ValidationError, NotFoundError) as error:
+            _notify_error(error)
+            return
+        fertilizer_application_notes.value = ""
+        reset_datetime_inputs(
+            fertilizer_application_date,
+            fertilizer_application_time,
+        )
+        ui.notify(t("saved_fertilizer_application"), type="positive")
         refresh_all()
 
     refresh_all()
