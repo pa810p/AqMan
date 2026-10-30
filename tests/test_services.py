@@ -375,6 +375,8 @@ def test_alembic_upgrade_creates_initial_schema(tmp_path: Path) -> None:
         "measurements",
         "notes",
         "water_changes",
+        "fertilizers",
+        "fertilizer_effects",
     } <= table_names
     assert "measurement_sessions" not in table_names
     measurement_columns = {column["name"] for column in inspect(engine).get_columns("measurements")}

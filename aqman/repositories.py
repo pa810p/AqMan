@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from aqman.models import (
     Aquarium,
+    Fertilizer,
+    FertilizerEffect,
     Measurement,
     Note,
     Parameter,
@@ -80,6 +82,93 @@ def add_parameter(
     session.add(parameter)
     session.flush()
     return parameter
+
+
+def list_fertilizer_names(session: Session) -> list[tuple[int, str]]:
+    statement = select(Fertilizer.id, Fertilizer.name).order_by(Fertilizer.id)
+    return [(fertilizer_id, name) for fertilizer_id, name in session.execute(statement)]
+
+
+def list_fertilizers(session: Session) -> list[Fertilizer]:
+    statement = (
+        select(Fertilizer)
+        .options(
+            selectinload(Fertilizer.effects).selectinload(FertilizerEffect.parameter)
+        )
+        .order_by(Fertilizer.name, Fertilizer.id)
+    )
+    return list(session.scalars(statement))
+
+
+def get_fertilizer(session: Session, fertilizer_id: int) -> Fertilizer | None:
+    statement = (
+        select(Fertilizer)
+        .where(Fertilizer.id == fertilizer_id)
+        .options(
+            selectinload(Fertilizer.effects).selectinload(FertilizerEffect.parameter)
+        )
+    )
+    return session.scalar(statement)
+
+
+def get_parameters_by_ids(session: Session, parameter_ids: set[int]) -> list[Parameter]:
+    if not parameter_ids:
+        return []
+    statement = select(Parameter).where(Parameter.id.in_(parameter_ids))
+    return list(session.scalars(statement))
+
+
+def add_fertilizer(
+    session: Session,
+    *,
+    name: str,
+    dose_ml_per_100l: float,
+    effects: list[tuple[int, float]],
+) -> Fertilizer:
+    fertilizer = Fertilizer(
+        name=name,
+        dose_ml_per_100l=dose_ml_per_100l,
+        effects=[
+            FertilizerEffect(parameter_id=parameter_id, ppm_per_dose=ppm_per_dose)
+            for parameter_id, ppm_per_dose in effects
+        ],
+    )
+    session.add(fertilizer)
+    session.flush()
+    return fertilizer
+
+
+def update_fertilizer(
+    session: Session,
+    fertilizer: Fertilizer,
+    *,
+    name: str,
+    dose_ml_per_100l: float,
+    effects: list[tuple[int, float]],
+) -> Fertilizer:
+    fertilizer.name = name
+    fertilizer.dose_ml_per_100l = dose_ml_per_100l
+
+    effects_by_parameter = {effect.parameter_id: effect for effect in fertilizer.effects}
+    requested_parameter_ids = {parameter_id for parameter_id, _ in effects}
+    for parameter_id, effect in effects_by_parameter.items():
+        if parameter_id not in requested_parameter_ids:
+            fertilizer.effects.remove(effect)
+
+    for parameter_id, ppm_per_dose in effects:
+        existing_effect = effects_by_parameter.get(parameter_id)
+        if existing_effect is None:
+            fertilizer.effects.append(
+                FertilizerEffect(
+                    parameter_id=parameter_id,
+                    ppm_per_dose=ppm_per_dose,
+                )
+            )
+        else:
+            existing_effect.ppm_per_dose = ppm_per_dose
+
+    session.flush()
+    return fertilizer
 
 
 def add_measurement(

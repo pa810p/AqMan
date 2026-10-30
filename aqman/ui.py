@@ -8,9 +8,10 @@ from nicegui.events import UploadEventArguments
 
 from aqman.images import MAX_IMAGE_SIZE_BYTES
 from aqman.logger import get_logger
-from aqman.models import Aquarium, WaterChange, WaterSource
+from aqman.models import Aquarium, Fertilizer, WaterChange, WaterSource
 from aqman.services import (
     AquariumService,
+    FertilizerService,
     NotFoundError,
     ParameterService,
     RecordService,
@@ -158,6 +159,7 @@ def _notify_error(error: Exception) -> None:
 def build_ui(
     aquarium_service: AquariumService,
     parameter_service: ParameterService,
+    fertilizer_service: FertilizerService,
     record_service: RecordService,
     language: str = "en",
 ) -> None:
@@ -295,11 +297,27 @@ def build_ui(
                 aquariums_container = ui.column().classes("w-full")
 
             with ui.tab_panel(settings_tab):
-                with ui.row().classes("items-center"):
-                    ui.label(t("parameter_definitions")).classes("text-h6")
-                    ui.button(t("add_parameter"), icon="add", on_click=lambda: open_parameter_dialog())
-                ui.label(t("parameter_hint")).classes("text-body2")
-                parameters_container = ui.column().classes("w-full")
+                with ui.element("div").classes("grid grid-cols-1 md:grid-cols-2 gap-4 w-full"):
+                    with ui.card().classes("w-full"):
+                        with ui.row().classes("items-center"):
+                            ui.label(t("parameter_definitions")).classes("text-h6")
+                            ui.button(
+                                t("add_parameter"),
+                                icon="add",
+                                on_click=lambda: open_parameter_dialog(),
+                            )
+                        ui.label(t("parameter_hint")).classes("text-body2")
+                        parameters_container = ui.column().classes("w-full")
+
+                    with ui.card().classes("w-full"):
+                        with ui.row().classes("items-center"):
+                            ui.label(t("fertilizer_catalog")).classes("text-h6")
+                            ui.button(
+                                t("add_fertilizer"),
+                                icon="add",
+                                on_click=lambda: open_fertilizer_dialog(),
+                            )
+                        fertilizers_container = ui.column().classes("w-full")
 
     def show_dashboard() -> None:
         nonlocal selected_aquarium_id
@@ -477,6 +495,48 @@ def build_ui(
                     ],
                     row_key="id",
                 ).classes("w-full")
+
+    def refresh_fertilizers() -> None:
+        fertilizers = fertilizer_service.list_fertilizers()
+        fertilizers_container.clear()
+        with fertilizers_container:
+            if not fertilizers:
+                ui.label(t("empty_fertilizers"))
+                return
+            for fertilizer in fertilizers:
+                with ui.card().classes("w-full"):
+                    with ui.row().classes("w-full items-start justify-between"):
+                        with ui.column().classes("gap-1"):
+                            ui.label(fertilizer.name).classes("text-subtitle1")
+                            ui.label(
+                                t("fertilizer_dose_summary", dose=fertilizer.dose_ml_per_100l)
+                            ).classes("text-body2")
+                        with ui.row().classes("items-center"):
+                            ui.button(
+                                t("edit_fertilizer"),
+                                icon="edit",
+                                on_click=lambda fertilizer_id=fertilizer.id: open_fertilizer_dialog(
+                                    fertilizer_id
+                                ),
+                            ).props("flat")
+                            ui.button(
+                                t("delete_fertilizer"),
+                                icon="delete",
+                                on_click=lambda fertilizer_id=fertilizer.id, name=fertilizer.name: confirm_delete_fertilizer(
+                                    fertilizer_id,
+                                    name,
+                                ),
+                            ).props("flat")
+                    ui.separator()
+                    with ui.column().classes("w-full gap-1"):
+                        for effect in fertilizer.effects:
+                            ui.label(
+                                t(
+                                    "fertilizer_effect_line",
+                                    parameter=f"{effect.parameter.name} ({effect.parameter.unit})",
+                                    ppm=effect.ppm_per_dose,
+                                )
+                            )
 
     def open_note_dialog(note_id: int) -> None:
         try:
@@ -745,6 +805,7 @@ def build_ui(
         refresh_dashboard()
         refresh_aquariums()
         refresh_parameters()
+        refresh_fertilizers()
         refresh_aquarium_details()
         refresh_history()
 
@@ -868,6 +929,214 @@ def build_ui(
             with ui.row().classes("justify-end"):
                 ui.button(t("cancel"), on_click=dialog.close).props("flat")
                 ui.button(t("save"), on_click=save, icon="save")
+        dialog.open()
+
+    def open_fertilizer_dialog(fertilizer_id: int | None = None) -> None:
+        fertilizer: Fertilizer | None = None
+        if fertilizer_id is not None:
+            try:
+                fertilizer = fertilizer_service.get_fertilizer(fertilizer_id)
+            except NotFoundError as error:
+                _notify_error(error)
+                return
+
+        parameters = fertilizer_service.list_effect_parameters()
+        parameter_by_id = {parameter.id: parameter for parameter in parameters}
+        parameter_options = {
+            parameter.id: f"{parameter.name} ({parameter.unit})"
+            for parameter in parameters
+        }
+
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
+            ui.label(
+                t("edit_fertilizer_dialog") if fertilizer else t("add_fertilizer_dialog")
+            ).classes("text-h6")
+            name_input = ui.input(
+                t("fertilizer_name"),
+                value=fertilizer.name if fertilizer else "",
+            ).classes("w-full")
+            dose_input = ui.number(
+                t("fertilizer_dose"),
+                value=fertilizer.dose_ml_per_100l if fertilizer else None,
+                min=0,
+            ).classes("w-full")
+            ui.label(t("fertilizer_effects")).classes("text-subtitle1")
+            if not parameters:
+                ui.label(t("no_fertilizer_parameters")).classes("text-body2")
+            effect_rows_container = ui.column().classes("w-full")
+            effect_rows = []
+
+            def parameter_id_for(value: object) -> int | None:
+                try:
+                    return int(value) if value is not None else None
+                except (TypeError, ValueError):
+                    return None
+
+            def update_effect_options() -> None:
+                for _, parameter_input, _, _ in effect_rows:
+                    selected_parameter_id = parameter_id_for(parameter_input.value)
+                    used_compounds = {
+                        parameter_by_id[other_id].name.strip().casefold()
+                        for _, other_input, _, _ in effect_rows
+                        if other_input is not parameter_input
+                        if (other_id := parameter_id_for(other_input.value)) in parameter_by_id
+                    }
+                    current_compound = (
+                        parameter_by_id[selected_parameter_id].name.strip().casefold()
+                        if selected_parameter_id in parameter_by_id
+                        else None
+                    )
+                    available_options = {
+                        parameter.id: f"{parameter.name} ({parameter.unit})"
+                        for parameter in parameters
+                        if parameter.name.strip().casefold() not in used_compounds
+                        or parameter.name.strip().casefold() == current_compound
+                    }
+                    parameter_input.options = available_options
+                    parameter_input.update()
+
+            def handle_parameter_change(changed_input) -> None:
+                changed_parameter_id = parameter_id_for(changed_input.value)
+                if changed_parameter_id in parameter_by_id:
+                    changed_compound = (
+                        parameter_by_id[changed_parameter_id].name.strip().casefold()
+                    )
+                    for _, other_input, _, _ in effect_rows:
+                        if other_input is changed_input:
+                            continue
+                        other_id = parameter_id_for(other_input.value)
+                        if (
+                            other_id in parameter_by_id
+                            and parameter_by_id[other_id].name.strip().casefold()
+                            == changed_compound
+                        ):
+                            other_input.value = None
+                            other_input.update()
+                update_effect_options()
+
+            def update_remove_buttons() -> None:
+                for _, _, _, remove_button in effect_rows:
+                    if len(effect_rows) == 1:
+                        remove_button.disable()
+                    else:
+                        remove_button.enable()
+
+            def remove_effect_row(row_to_remove) -> None:
+                if len(effect_rows) <= 1:
+                    return
+                row_to_remove.delete()
+                effect_rows[:] = [
+                    row for row in effect_rows if row[0] is not row_to_remove
+                ]
+                update_effect_options()
+                update_remove_buttons()
+
+            def add_effect_row(
+                parameter_id: int | None = None,
+                ppm_per_dose: float | None = None,
+            ) -> None:
+                with effect_rows_container:
+                    with ui.row().classes("w-full items-center gap-2") as row:
+                        parameter_input = ui.select(
+                            parameter_options,
+                            label=t("fertilizer_effect_parameter"),
+                            value=parameter_id,
+                        ).classes("min-w-0 flex-1")
+                        ppm_input = ui.number(
+                            t("fertilizer_effect_ppm"),
+                            value=ppm_per_dose,
+                            min=0,
+                        ).classes("min-w-0 flex-1")
+                        remove_button = ui.button(
+                            icon="close",
+                            on_click=lambda: remove_effect_row(row),
+                        ).props("flat round").tooltip(t("remove_fertilizer_effect"))
+                effect_rows.append((row, parameter_input, ppm_input, remove_button))
+                parameter_input.on_value_change(
+                    lambda _: handle_parameter_change(parameter_input)
+                )
+                update_effect_options()
+                update_remove_buttons()
+
+            if fertilizer:
+                for effect in fertilizer.effects:
+                    add_effect_row(effect.parameter_id, effect.ppm_per_dose)
+            else:
+                add_effect_row()
+
+            ui.button(
+                t("add_fertilizer_effect"),
+                icon="add",
+                on_click=lambda: add_effect_row(),
+            ).props("flat")
+
+            def save() -> None:
+                try:
+                    if dose_input.value is None:
+                        raise ValidationError("Base dose must be a number.")
+                    dose = float(dose_input.value)
+                    effects: list[tuple[int, float]] = []
+                    for _, parameter_input, ppm_input, _ in effect_rows:
+                        parameter_id = parameter_id_for(parameter_input.value)
+                        if parameter_id is None:
+                            raise ValidationError(
+                                "Select a water parameter for every fertilizer effect."
+                            )
+                        if ppm_input.value is None:
+                            raise ValidationError("Fertilizer effect must be a number.")
+                        effects.append((parameter_id, float(ppm_input.value)))
+                    if fertilizer:
+                        fertilizer_service.update_fertilizer(
+                            fertilizer.id,
+                            name_input.value or "",
+                            dose,
+                            effects,
+                        )
+                    else:
+                        fertilizer_service.create_fertilizer(
+                            name_input.value or "",
+                            dose,
+                            effects,
+                        )
+                except (NotFoundError, ValidationError, TypeError, ValueError) as error:
+                    if isinstance(error, (TypeError, ValueError)) and not isinstance(
+                        error, ValidationError
+                    ):
+                        error = ValidationError("Enter valid fertilizer values.")
+                    _notify_error(error)
+                    return
+                dialog.close()
+                ui.notify(t("saved_fertilizer"), type="positive")
+                refresh_all()
+
+            with ui.row().classes("justify-end"):
+                ui.button(t("cancel"), on_click=dialog.close).props("flat")
+                ui.button(t("save"), on_click=save, icon="save")
+        dialog.open()
+
+    def confirm_delete_fertilizer(fertilizer_id: int, name: str) -> None:
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-md"):
+            ui.label(t("confirm_delete_fertilizer", name=name))
+
+            def delete() -> None:
+                try:
+                    fertilizer_service.delete_fertilizer(fertilizer_id)
+                except NotFoundError as error:
+                    _notify_error(error)
+                    dialog.close()
+                    refresh_fertilizers()
+                    return
+                dialog.close()
+                ui.notify(t("deleted_fertilizer"), type="positive")
+                refresh_all()
+
+            with ui.row().classes("justify-end"):
+                ui.button(t("cancel"), on_click=dialog.close).props("flat")
+                ui.button(
+                    t("delete_fertilizer"),
+                    icon="delete",
+                    on_click=delete,
+                ).props("color=negative")
         dialog.open()
 
     def open_measurement_dialog(measurement_id: int) -> None:

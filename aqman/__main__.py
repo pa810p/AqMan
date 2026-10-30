@@ -11,7 +11,7 @@ from aqman.config import get_settings
 from aqman.database import create_database_engine, create_session_factory
 from aqman.logger import configure_logging
 from aqman.migrations import upgrade_database
-from aqman.services import AquariumService, ParameterService, RecordService
+from aqman.services import AquariumService, FertilizerService, ParameterService, RecordService
 from aqman.translations import LANGUAGE_NAMES
 from aqman.ui import build_ui
 
@@ -72,6 +72,7 @@ def main() -> None:
     session_factory = create_session_factory(engine)
     aquarium_service = AquariumService(session_factory)
     parameter_service = ParameterService(session_factory)
+    fertilizer_service = FertilizerService(session_factory)
     record_service = RecordService(session_factory)
 
     @ui.page("/")
@@ -81,6 +82,7 @@ def main() -> None:
         build_ui(
             aquarium_service,
             parameter_service,
+            fertilizer_service,
             record_service,
             language=language,
         )

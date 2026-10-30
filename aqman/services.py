@@ -1,4 +1,5 @@
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session, sessionmaker
@@ -8,6 +9,7 @@ from aqman.images import ImageValidationError, create_thumbnail
 from aqman.logger import get_logger
 from aqman.models import (
     Aquarium,
+    Fertilizer,
     Measurement,
     Note,
     Parameter,
@@ -186,6 +188,142 @@ class ParameterService:
             )
         logger.info("Created parameter id=%s", parameter.id)
         return parameter
+
+
+class FertilizerService:
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    def list_fertilizers(self) -> list[Fertilizer]:
+        with self._session_factory() as session:
+            return repositories.list_fertilizers(session)
+
+    def get_fertilizer(self, fertilizer_id: int) -> Fertilizer:
+        with self._session_factory() as session:
+            fertilizer = repositories.get_fertilizer(session, fertilizer_id)
+            if fertilizer is None:
+                raise NotFoundError("Fertilizer not found.")
+            return fertilizer
+
+    def list_effect_parameters(self) -> list[Parameter]:
+        with self._session_factory() as session:
+            return [
+                parameter
+                for parameter in repositories.list_parameters(session)
+                if parameter.unit.strip().casefold() in {"mg/l", "ppm"}
+            ]
+
+    def create_fertilizer(
+        self,
+        name: str,
+        dose_ml_per_100l: float,
+        effects: Sequence[tuple[int, float]],
+    ) -> Fertilizer:
+        clean_name = _required_text(name, "Fertilizer name", 120)
+        dose = _positive_number(dose_ml_per_100l, "Base dose")
+        with self._session_factory.begin() as session:
+            self._validate_unique_name(session, clean_name)
+            clean_effects = self._validate_effects(session, effects)
+            fertilizer = repositories.add_fertilizer(
+                session,
+                name=clean_name,
+                dose_ml_per_100l=dose,
+                effects=clean_effects,
+            )
+            loaded_fertilizer = repositories.get_fertilizer(session, fertilizer.id)
+            assert loaded_fertilizer is not None
+            fertilizer = loaded_fertilizer
+        logger.info("Created fertilizer id=%s", fertilizer.id)
+        return fertilizer
+
+    def update_fertilizer(
+        self,
+        fertilizer_id: int,
+        name: str,
+        dose_ml_per_100l: float,
+        effects: Sequence[tuple[int, float]],
+    ) -> Fertilizer:
+        clean_name = _required_text(name, "Fertilizer name", 120)
+        dose = _positive_number(dose_ml_per_100l, "Base dose")
+        with self._session_factory.begin() as session:
+            fertilizer = repositories.get_fertilizer(session, fertilizer_id)
+            if fertilizer is None:
+                raise NotFoundError("Fertilizer not found.")
+            self._validate_unique_name(session, clean_name, exclude_id=fertilizer_id)
+            clean_effects = self._validate_effects(session, effects)
+            fertilizer = repositories.update_fertilizer(
+                session,
+                fertilizer,
+                name=clean_name,
+                dose_ml_per_100l=dose,
+                effects=clean_effects,
+            )
+            loaded_fertilizer = repositories.get_fertilizer(session, fertilizer.id)
+            assert loaded_fertilizer is not None
+            fertilizer = loaded_fertilizer
+        logger.info("Updated fertilizer id=%s", fertilizer_id)
+        return fertilizer
+
+    def delete_fertilizer(self, fertilizer_id: int) -> None:
+        with self._session_factory.begin() as session:
+            fertilizer = repositories.get_fertilizer(session, fertilizer_id)
+            if fertilizer is None:
+                raise NotFoundError("Fertilizer not found.")
+            session.delete(fertilizer)
+        logger.info("Deleted fertilizer id=%s", fertilizer_id)
+
+    def _validate_unique_name(
+        self,
+        session: Session,
+        name: str,
+        *,
+        exclude_id: int | None = None,
+    ) -> None:
+        normalized_name = name.casefold()
+        if any(
+            fertilizer_id != exclude_id
+            and existing_name.casefold() == normalized_name
+            for fertilizer_id, existing_name in repositories.list_fertilizer_names(session)
+        ):
+            raise ValidationError("A fertilizer with this name already exists.")
+
+    def _validate_effects(
+        self,
+        session: Session,
+        effects: Sequence[tuple[int, float]],
+    ) -> list[tuple[int, float]]:
+        if not effects:
+            raise ValidationError("At least one fertilizer effect is required.")
+
+        normalized_effects: list[tuple[int, float]] = []
+        seen_parameter_ids: set[int] = set()
+        for parameter_id, ppm_per_dose in effects:
+            if not isinstance(parameter_id, int) or isinstance(parameter_id, bool):
+                raise ValidationError("Select a water parameter for every fertilizer effect.")
+            if parameter_id <= 0:
+                raise ValidationError("Select a valid water parameter for every fertilizer effect.")
+            if parameter_id in seen_parameter_ids:
+                raise ValidationError("A fertilizer cannot have duplicate effects.")
+            seen_parameter_ids.add(parameter_id)
+            normalized_effects.append(
+                (parameter_id, _positive_number(ppm_per_dose, "Fertilizer effect"))
+            )
+
+        parameters = repositories.get_parameters_by_ids(session, seen_parameter_ids)
+        parameters_by_id = {parameter.id: parameter for parameter in parameters}
+        if len(parameters_by_id) != len(seen_parameter_ids):
+            raise ValidationError("A selected water parameter was not found.")
+
+        seen_compounds: set[str] = set()
+        for parameter in parameters:
+            if parameter.unit.strip().casefold() not in {"mg/l", "ppm"}:
+                raise ValidationError("Fertilizer effects require a parameter in mg/L or ppm.")
+            compound = parameter.name.strip().casefold()
+            if compound in seen_compounds:
+                raise ValidationError("A fertilizer cannot have multiple effects for the same compound.")
+            seen_compounds.add(compound)
+
+        return normalized_effects
 
 
 class RecordService:

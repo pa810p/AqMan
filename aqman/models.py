@@ -12,6 +12,8 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.engine import Dialect
@@ -84,6 +86,59 @@ class Parameter(Base):
     description: Mapped[str | None] = mapped_column(Text)
 
     measurements: Mapped[list["Measurement"]] = relationship(back_populates="parameter")
+    fertilizer_effects: Mapped[list["FertilizerEffect"]] = relationship(
+        back_populates="parameter"
+    )
+
+
+class Fertilizer(Base):
+    __tablename__ = "fertilizers"
+    __table_args__ = (
+        CheckConstraint(
+            "dose_ml_per_100l > 0",
+            name="ck_fertilizers_dose_positive",
+        ),
+        Index("uq_fertilizers_name_lower", text("lower(name)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    dose_ml_per_100l: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+
+    effects: Mapped[list["FertilizerEffect"]] = relationship(
+        back_populates="fertilizer",
+        cascade="all, delete-orphan",
+        order_by="FertilizerEffect.id",
+    )
+
+
+class FertilizerEffect(Base):
+    __tablename__ = "fertilizer_effects"
+    __table_args__ = (
+        CheckConstraint("ppm_per_dose > 0", name="ck_fertilizer_effects_ppm_positive"),
+        UniqueConstraint(
+            "fertilizer_id",
+            "parameter_id",
+            name="uq_fertilizer_effects_fertilizer_parameter",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fertilizer_id: Mapped[int] = mapped_column(
+        ForeignKey("fertilizers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    parameter_id: Mapped[int] = mapped_column(ForeignKey("parameters.id"), nullable=False)
+    ppm_per_dose: Mapped[float] = mapped_column(Float, nullable=False)
+
+    fertilizer: Mapped[Fertilizer] = relationship(back_populates="effects")
+    parameter: Mapped[Parameter] = relationship(back_populates="fertilizer_effects")
 
 
 class Measurement(Base):
