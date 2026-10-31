@@ -8,10 +8,11 @@ from aqman.ui import (
     _calendar_month_before,
     _default_chart_range,
     _format_datetime,
+    _measurement_chart_options,
+)
+from aqman.ui.components.date_time_picker import (
     _local_datetime_input_value,
     _local_datetime_parts,
-    _measurement_chart_options,
-    _parse_local_datetime,
     _parse_local_datetime_value,
 )
 
@@ -24,12 +25,6 @@ def test_local_datetime_parts_use_24_hour_time() -> None:
     assert date_value == value.astimezone().strftime("%Y-%m-%d")
     assert time_value == value.astimezone().strftime("%H:%M")
     assert len(time_value) == 5
-
-
-def test_parse_local_datetime_converts_local_time_to_utc() -> None:
-    expected = datetime(2026, 10, 30, 17, 35).astimezone(timezone.utc)
-
-    assert _parse_local_datetime("2026-10-30", "17:35") == expected
 
 
 def test_combined_datetime_input_uses_iso_value() -> None:
@@ -46,7 +41,10 @@ def test_parse_combined_datetime_input_converts_local_time_to_utc() -> None:
     assert _parse_local_datetime_value("2026-10-30 17:35") == expected
 
 
-@pytest.mark.parametrize("value", [None, "", "2026-10-30", "30-10-2026 17:35"])
+@pytest.mark.parametrize(
+    "value",
+    [None, "", "2026-10-30", "30-10-2026 17:35", "2026-10-30 25:00"],
+)
 def test_parse_combined_datetime_input_rejects_missing_or_invalid_values(
     value: str | None,
 ) -> None:
@@ -108,20 +106,3 @@ def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
         for measurement in measurements
     ]
 
-
-@pytest.mark.parametrize(
-    ("date_value", "time_value"),
-    [
-        ("", "17:35"),
-        ("2026-10-30", ""),
-        ("30-10-2026", "17:35"),
-        ("2026-10-30", "25:00"),
-        ("2026-02-30", "17:35"),
-    ],
-)
-def test_parse_local_datetime_rejects_missing_or_invalid_values(
-    date_value: str,
-    time_value: str,
-) -> None:
-    with pytest.raises(ValidationError):
-        _parse_local_datetime(date_value, time_value)

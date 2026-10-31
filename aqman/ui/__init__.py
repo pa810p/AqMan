@@ -1,14 +1,11 @@
 import base64
 import calendar
-from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from functools import partial
 from typing import Any
 
 from nicegui import ui
-from nicegui.element import Element
-from nicegui.elements.input import Input
-from nicegui.events import ScrollEventArguments, UploadEventArguments
+from nicegui.events import UploadEventArguments
 
 from aqman.images import MAX_IMAGE_SIZE_BYTES
 from aqman.logger import get_logger
@@ -35,12 +32,9 @@ from aqman.services import (
     ValidationError,
 )
 from aqman.translations import LANGUAGE_NAMES, translate
+from aqman.ui.components import DateTimePicker
 
 logger = get_logger(__name__)
-
-TIME_WHEEL_ROW_HEIGHT_PX = 32
-TIME_WHEEL_VISIBLE_ROWS = 8
-TIME_WHEEL_PADDING_ROWS = TIME_WHEEL_VISIBLE_ROWS // 2
 
 
 SOURCE_TRANSLATION_KEYS = {
@@ -57,8 +51,8 @@ body {
 }
 
 body {
-    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364) fixed !important;
-    color: #e7f1f2;
+    background: linear-gradient(135deg, #10251a, #1c3c2a, #315a3e) fixed !important;
+    color: #eaf3eb;
 }
 
 .q-layout,
@@ -70,99 +64,71 @@ body {
 }
 
 .q-header {
-    background: linear-gradient(110deg, rgba(15, 32, 39, 0.96), rgba(32, 58, 67, 0.94)) !important;
-    border-bottom: 1px solid rgba(125, 211, 205, 0.2);
+    background: linear-gradient(110deg, rgba(16, 37, 26, 0.96), rgba(31, 61, 42, 0.94)) !important;
+    border-bottom: 1px solid rgba(150, 205, 149, 0.22);
     backdrop-filter: blur(12px);
 }
 
 .q-card,
 .q-menu,
 .q-dialog__inner > .q-card {
-    background: rgba(15, 38, 45, 0.9) !important;
-    border: 1px solid rgba(125, 211, 205, 0.18);
+    background: rgba(14, 32, 22, 0.9) !important;
+    border: 1px solid rgba(150, 205, 149, 0.18);
     border-radius: 18px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 
 .q-tab {
-    color: #b6c9cc;
+    color: #b9cbb9;
 }
 
 .q-tab--active {
-    color: #6bbdb5 !important;
+    color: #9cdda0 !important;
 }
 
 .q-tab__indicator {
-    background: #398f88 !important;
+    background: #57a66a !important;
 }
 
 .q-field--outlined .q-field__control:before {
-    border-color: rgba(160, 194, 198, 0.38);
+    border-color: rgba(168, 196, 168, 0.38);
 }
 
 .q-field--focused .q-field__control:after {
-    border-color: #398f88;
+    border-color: #57a66a;
 }
 
 .q-field__native,
 .q-field__input,
 .q-field__label {
-    color: #e7f1f2;
+    color: #eaf3eb;
 }
 
 .q-field--filled .q-field__control {
-    background: rgba(8, 27, 33, 0.4);
+    background: rgba(8, 24, 16, 0.4);
     border-radius: 10px 10px 0 0;
 }
 
 .q-table__container {
-    background: rgba(15, 38, 45, 0.86);
-    border: 1px solid rgba(125, 211, 205, 0.16);
+    background: rgba(14, 32, 22, 0.86);
+    border: 1px solid rgba(150, 205, 149, 0.16);
     border-radius: 16px;
-    color: #e7f1f2;
+    color: #eaf3eb;
 }
 
 .q-table thead tr {
-    background: rgba(65, 112, 119, 0.28);
+    background: rgba(70, 115, 77, 0.28);
 }
 
 .q-table tbody tr:hover {
-    background: rgba(38, 122, 116, 0.1);
+    background: rgba(73, 154, 83, 0.12);
 }
 
 .q-separator {
-    background: rgba(160, 194, 198, 0.2);
+    background: rgba(168, 196, 168, 0.2);
 }
 </style>
 """
-
-
-def _local_datetime_parts(value: datetime | None = None) -> tuple[str, str]:
-    local_value = value.astimezone() if value is not None else datetime.now().astimezone()
-    return local_value.strftime("%Y-%m-%d"), local_value.strftime("%H:%M")
-
-
-def _local_datetime_input_value(value: datetime | None = None) -> str:
-    date_value, time_value = _local_datetime_parts(value)
-    return f"{date_value} {time_value}"
-
-
-def _parse_local_datetime_value(value: str | None) -> datetime:
-    if not value or not ("T" in value or " " in value):
-        raise ValidationError("Enter a date and time.")
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as error:
-        raise ValidationError("Enter a valid date and time.") from error
-    if parsed.tzinfo is None:
-        parsed = parsed.astimezone()
-    return parsed.astimezone(timezone.utc)
-
-
-def _parse_local_datetime(date_value: str | None, time_value: str | None) -> datetime:
-    if not date_value or not time_value:
-        raise ValidationError("Enter a date and time.")
-    return _parse_local_datetime_value(f"{date_value}T{time_value}")
 
 
 def _calendar_month_before(value: datetime) -> datetime:
@@ -194,15 +160,15 @@ def _measurement_chart_options(
         "xAxis": {
             "type": "time",
             "axisLabel": {"formatter": "{yyyy}-{MM}-{dd}"},
-            "axisLine": {"lineStyle": {"color": "#91a8aa"}},
-            "splitLine": {"lineStyle": {"color": "rgba(160, 194, 198, 0.12)"}},
+            "axisLine": {"lineStyle": {"color": "#9db59f"}},
+            "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.12)"}},
         },
         "yAxis": {
             "type": "value",
             "name": f"{parameter.name} ({parameter.unit})",
             "scale": True,
-            "axisLine": {"lineStyle": {"color": "#91a8aa"}},
-            "splitLine": {"lineStyle": {"color": "rgba(160, 194, 198, 0.2)"}},
+            "axisLine": {"lineStyle": {"color": "#9db59f"}},
+            "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.2)"}},
         },
         "series": [
             {
@@ -216,11 +182,11 @@ def _measurement_chart_options(
                 "symbol": "circle",
                 "symbolSize": 8,
                 "connectNulls": False,
-                "lineStyle": {"color": "#5caea5", "width": 2},
-                "itemStyle": {"color": "#5caea5"},
+                "lineStyle": {"color": "#7acb84", "width": 2},
+                "itemStyle": {"color": "#7acb84"},
             }
         ],
-        "textStyle": {"color": "#e7f1f2"},
+        "textStyle": {"color": "#eaf3eb"},
     }
 
 
@@ -261,199 +227,6 @@ def build_ui(
     def t(key: str, **values: object) -> str:
         return translate(language, key, **values)
 
-    def create_datetime_inputs(value: datetime | None = None) -> tuple[Input, Input]:
-        date_value, time_value = _local_datetime_parts(value)
-        with ui.row().classes("w-full gap-2"):
-            date_input = ui.input(
-                t("date"),
-                value=date_value,
-                placeholder=t("date_format_hint"),
-            ).props('mask="####-##-##"').classes("min-w-0 flex-1")
-            with date_input.add_slot("append"):
-                with ui.menu().props("no-parent-event") as date_menu:
-                    date_picker = ui.date(
-                        value=date_value,
-                        mask="YYYY-MM-DD",
-                    )
-                ui.icon("event").classes("cursor-pointer").on(
-                    "click",
-                    lambda: date_menu.open(),
-                )
-            date_picker.bind_value(date_input)
-            time_input = ui.input(
-                t("time"),
-                value=time_value,
-                placeholder="HH:MM",
-            ).props('mask="##:##"').classes("min-w-0 flex-1")
-        return date_input, time_input
-
-    def create_datetime_picker(
-        label: str,
-        on_change: Callable[[], None],
-    ) -> tuple[Input, Callable[[datetime], None]]:
-        date_value, time_value = _local_datetime_parts()
-        time_parts = {
-            "hour": int(time_value[:2]),
-            "minute": int(time_value[3:]),
-        }
-        datetime_input = ui.input(
-            label,
-            value=_local_datetime_input_value(),
-        ).props("readonly").classes("min-w-64 flex-1")
-
-        def create_numeric_wheel(
-            number_of_values: int,
-            initial_value: int,
-            on_select: Callable[[int], None],
-        ) -> tuple[Callable[[int], None], Callable[[], None]]:
-            selected_value = initial_value
-            number_labels: list[Element] = []
-            wheel_height = TIME_WHEEL_ROW_HEIGHT_PX * TIME_WHEEL_VISIBLE_ROWS
-            wheel_ready = False
-
-            def scroll_position(value: int) -> float:
-                return max(
-                    0,
-                    (TIME_WHEEL_PADDING_ROWS + value) * TIME_WHEEL_ROW_HEIGHT_PX
-                    - (wheel_height - TIME_WHEEL_ROW_HEIGHT_PX) / 2,
-                )
-
-            def set_selected_value(value: int, notify: bool = True) -> None:
-                nonlocal selected_value
-                if not 0 <= value < number_of_values:
-                    return
-                changed = value != selected_value
-                if changed:
-                    selected_value = value
-                    for index, number_label in enumerate(number_labels):
-                        if index == selected_value:
-                            number_label.classes(add="bg-primary text-white")
-                        else:
-                            number_label.classes(remove="bg-primary text-white")
-                if wheel_ready:
-                    wheel.scroll_to(pixels=scroll_position(selected_value))
-                if notify and changed:
-                    on_select(selected_value)
-
-            def handle_scroll(event: ScrollEventArguments) -> None:
-                if not wheel_ready:
-                    return
-                centered_index = round(
-                    (
-                        event.vertical_position
-                        + (wheel_height - TIME_WHEEL_ROW_HEIGHT_PX) / 2
-                    )
-                    / TIME_WHEEL_ROW_HEIGHT_PX
-                ) - TIME_WHEEL_PADDING_ROWS
-                set_selected_value(
-                    min(max(centered_index, 0), number_of_values - 1)
-                )
-
-            wheel = ui.scroll_area(on_scroll=handle_scroll).style(
-                f"height: {wheel_height}px; width: 3.5rem;"
-            )
-            with wheel:
-                with ui.column().classes("w-full items-center gap-0"):
-                    for _ in range(TIME_WHEEL_PADDING_ROWS):
-                        ui.element("div").classes("w-full shrink-0").style(
-                            f"height: {TIME_WHEEL_ROW_HEIGHT_PX}px;"
-                        )
-                    for value in range(number_of_values):
-                        number_label = ui.label(f"{value:02d}").classes(
-                            "w-full cursor-pointer select-none rounded text-center"
-                        ).style(
-                            f"height: {TIME_WHEEL_ROW_HEIGHT_PX}px; "
-                            "line-height: 32px;"
-                        )
-                        if value == selected_value:
-                            number_label.classes("bg-primary text-white")
-                        number_label.on(
-                            "click",
-                            lambda value=value: set_selected_value(value),
-                        )
-                        number_labels.append(number_label)
-                    for _ in range(TIME_WHEEL_PADDING_ROWS):
-                        ui.element("div").classes("w-full shrink-0").style(
-                            f"height: {TIME_WHEEL_ROW_HEIGHT_PX}px;"
-                        )
-
-            def set_value(value: int) -> None:
-                set_selected_value(value, notify=False)
-
-            def center_selected_value() -> None:
-                nonlocal wheel_ready
-                wheel.scroll_to(pixels=scroll_position(selected_value))
-                wheel_ready = True
-
-            return set_value, center_selected_value
-
-        with datetime_input.add_slot("append"):
-            with ui.menu().props("no-parent-event") as datetime_menu:
-                with ui.row().classes("no-wrap items-start"):
-                    date_picker = ui.date(date_value, mask="YYYY-MM-DD")
-                    with ui.column().classes("items-center gap-0"):
-                        ui.label("HH").classes("text-caption")
-                        set_hour, center_hour = create_numeric_wheel(
-                            24,
-                            time_parts["hour"],
-                            lambda value: update_time_part("hour", value),
-                        )
-                    with ui.column().classes("items-center gap-0"):
-                        ui.label("MM").classes("text-caption")
-                        set_minute, center_minute = create_numeric_wheel(
-                            60,
-                            time_parts["minute"],
-                            lambda value: update_time_part("minute", value),
-                        )
-            ui.icon("event").classes("cursor-pointer").on(
-                "click",
-                lambda: open_datetime_menu(),
-            )
-
-        def sync_datetime_input() -> None:
-            if date_picker.value is None:
-                return
-            datetime_input.value = (
-                f"{date_picker.value} "
-                f"{time_parts['hour']:02d}:{time_parts['minute']:02d}"
-            )
-            datetime_input.update()
-            on_change()
-
-        def center_time_wheels() -> None:
-            center_hour()
-            center_minute()
-
-        def open_datetime_menu() -> None:
-            datetime_menu.open()
-            ui.timer(0.2, center_time_wheels, once=True, immediate=False)
-
-        datetime_input.on("click", lambda: open_datetime_menu())
-
-        def update_time_part(part: str, value: int) -> None:
-            time_parts[part] = value
-            sync_datetime_input()
-
-        def handle_datetime_picker_change(_: object) -> None:
-            sync_datetime_input()
-
-        def set_value(value: datetime) -> None:
-            date_value, time_value = _local_datetime_parts(value)
-            date_picker.value = date_value
-            date_picker.update()
-            time_parts["hour"] = int(time_value[:2])
-            time_parts["minute"] = int(time_value[3:])
-            set_hour(time_parts["hour"])
-            set_minute(time_parts["minute"])
-            datetime_input.value = _local_datetime_input_value(value)
-            datetime_input.update()
-
-        date_picker.on_value_change(handle_datetime_picker_change)
-        return datetime_input, set_value
-
-    def reset_datetime_inputs(date_input: Input, time_input: Input) -> None:
-        date_input.value, time_input.value = _local_datetime_parts()
-
     selected_aquarium_id: int | None = None
 
     def current_aquarium_id() -> int:
@@ -462,13 +235,13 @@ def build_ui(
         return selected_aquarium_id
 
     ui.colors(
-        primary="#267a74",
-        secondary="#547b83",
-        accent="#5caea5",
-        dark="#10272e",
-        positive="#65d6a5",
+        primary="#347f47",
+        secondary="#54785a",
+        accent="#83c98b",
+        dark="#12271a",
+        positive="#65c883",
         negative="#ef8080",
-        info="#63b8c5",
+        info="#70b58e",
         warning="#e6bd70",
     )
     ui.dark_mode().enable()
@@ -516,7 +289,7 @@ def build_ui(
                 with ui.grid(columns=2).classes("w-full"):
                     with ui.card().classes("w-full"):
                         ui.label(t("add_measurement")).classes("text-h6")
-                        measurement_date, measurement_time = create_datetime_inputs()
+                        measurement_datetime = DateTimePicker(t("date_time"))
                         measurement_parameter = ui.select({}, label=t("parameter")).classes("w-full")
                         measurement_value = ui.number(t("value")).classes("w-full")
                         measurement_note = ui.input(t("optional_note")).classes("w-full")
@@ -528,9 +301,7 @@ def build_ui(
 
                     with ui.card().classes("w-full"):
                         ui.label(t("new_fertilizer_application")).classes("text-h6")
-                        fertilizer_application_date, fertilizer_application_time = (
-                            create_datetime_inputs()
-                        )
+                        fertilizer_application_datetime = DateTimePicker(t("date_time"))
                         fertilizer_application_fertilizer = ui.select(
                             {},
                             label=t("fertilizer"),
@@ -565,14 +336,14 @@ def build_ui(
 
                     with ui.card().classes("w-full"):
                         ui.label(t("new_note")).classes("text-h6")
-                        note_date, note_time = create_datetime_inputs()
+                        note_datetime = DateTimePicker(t("date_time"))
                         note_category = ui.input(t("optional_category")).classes("w-full")
                         note_content = ui.textarea(t("note_content")).classes("w-full")
                         ui.button(t("save_note"), icon="save", on_click=lambda: save_note())
 
                     with ui.card().classes("w-full"):
                         ui.label(t("new_water_change")).classes("text-h6")
-                        water_change_date, water_change_time = create_datetime_inputs()
+                        water_change_datetime = DateTimePicker(t("date_time"))
                         water_source = ui.select(
                             {
                                 source.value: t(translation_key)
@@ -600,14 +371,16 @@ def build_ui(
                                 {},
                                 label=t("parameter"),
                             ).classes("min-w-48 flex-1")
-                            chart_start, set_chart_start = create_datetime_picker(
+                            chart_start = DateTimePicker(
                                 t("chart_start"),
-                                lambda: refresh_chart(),
+                                on_change=lambda: refresh_chart(),
                             )
-                            chart_end, set_chart_end = create_datetime_picker(
+                            chart_start.element.classes("flex-1")
+                            chart_end = DateTimePicker(
                                 t("chart_end"),
-                                lambda: refresh_chart(),
+                                on_change=lambda: refresh_chart(),
                             )
+                            chart_end.element.classes("flex-1")
                         chart_status = ui.label().classes("text-body2")
                         chart = ui.echart({}).classes("w-full h-96")
 
@@ -687,11 +460,11 @@ def build_ui(
                             ).on("click", open_aquarium).tooltip(t("open_aquarium"))
                         else:
                             placeholder = ui.column().classes(
-                                "w-full h-40 items-center justify-center rounded-lg bg-slate-800"
+                                "w-full h-40 items-center justify-center rounded-lg bg-emerald-950"
                                 " cursor-pointer"
                             ).on("click", open_aquarium).tooltip(t("open_aquarium"))
                             with placeholder:
-                                ui.icon("image", size="48px").classes("text-teal-300")
+                                ui.icon("image", size="48px").classes("text-emerald-300")
                                 ui.label(t("no_photo")).classes("text-caption")
                         ui.label(item.aquarium.name).classes("text-h6")
                         ui.label(t("volume", volume=item.aquarium.volume_liters))
@@ -737,9 +510,9 @@ def build_ui(
                         )
                     else:
                         with ui.column().classes(
-                            "ml-auto h-32 w-48 shrink-0 items-center justify-center rounded-lg bg-slate-800"
+                            "ml-auto h-32 w-48 shrink-0 items-center justify-center rounded-lg bg-emerald-950"
                         ):
-                            ui.icon("image", size="40px").classes("text-teal-300")
+                            ui.icon("image", size="40px").classes("text-emerald-300")
                             ui.label(t("no_photo")).classes("text-caption")
 
     def refresh_aquariums() -> None:
@@ -1028,7 +801,7 @@ def build_ui(
 
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(t("edit_note_dialog")).classes("text-h6")
-            date_input, time_input = create_datetime_inputs(note.timestamp)
+            note_datetime = DateTimePicker(t("date_time"), note.timestamp)
             category_input = ui.input(
                 t("optional_category"),
                 value=note.category or "",
@@ -1043,7 +816,7 @@ def build_ui(
                     record_service.update_note(
                         aquarium_id,
                         note.id,
-                        _parse_local_datetime(date_input.value, time_input.value),
+                        note_datetime.value,
                         category_input.value,
                         content_input.value or "",
                     )
@@ -1107,8 +880,8 @@ def build_ui(
 
         if not chart_range_initialized:
             start, end = _default_chart_range()
-            set_chart_start(start)
-            set_chart_end(end)
+            chart_start.set_value(start)
+            chart_end.set_value(end)
             chart_range_initialized = True
 
         if parameter_id is None:
@@ -1119,8 +892,8 @@ def build_ui(
             return
 
         try:
-            start = _parse_local_datetime_value(chart_start.value)
-            end = _parse_local_datetime_value(chart_end.value)
+            start = chart_start.value
+            end = chart_end.value
             if start > end:
                 set_chart_options({})
                 chart.set_visibility(False)
@@ -1149,8 +922,6 @@ def build_ui(
         chart_status.set_visibility(not measurements)
 
     chart_parameter.on_value_change(lambda _: refresh_chart())
-    for chart_input in (chart_start, chart_end):
-        chart_input.on_value_change(lambda _: refresh_chart())
 
     def refresh_history() -> None:
         history_container.clear()
@@ -1794,7 +1565,10 @@ def build_ui(
         }
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(t("edit_measurement_dialog")).classes("text-h6")
-            date_input, time_input = create_datetime_inputs(measurement.timestamp)
+            measurement_datetime = DateTimePicker(
+                t("date_time"),
+                measurement.timestamp,
+            )
             parameter_input = ui.select(
                 parameter_options,
                 label=t("parameter"),
@@ -1815,7 +1589,7 @@ def build_ui(
                     record_service.update_measurement(
                         aquarium_id,
                         measurement.id,
-                        _parse_local_datetime(date_input.value, time_input.value),
+                        measurement_datetime.value,
                         parameter_id,
                         value_input.value,
                         note_input.value,
@@ -1849,7 +1623,10 @@ def build_ui(
         }
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(t("edit_fertilizer_application")).classes("text-h6")
-            date_input, time_input = create_datetime_inputs(application.timestamp)
+            application_datetime = DateTimePicker(
+                t("date_time"),
+                application.timestamp,
+            )
             fertilizer_input = ui.select(
                 fertilizer_options,
                 label=t("fertilizer"),
@@ -1874,7 +1651,7 @@ def build_ui(
                     record_service.update_fertilizer_application(
                         aquarium_id,
                         application.id,
-                        _parse_local_datetime(date_input.value, time_input.value),
+                        application_datetime.value,
                         fertilizer_id,
                         dose_input.value,
                         notes_input.value,
@@ -1939,7 +1716,10 @@ def build_ui(
         }
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(t("edit_water_change_dialog")).classes("text-h6")
-            date_input, time_input = create_datetime_inputs(water_change.timestamp)
+            water_change_datetime = DateTimePicker(
+                t("date_time"),
+                water_change.timestamp,
+            )
             source_input = ui.select(
                 source_options,
                 label=t("water_source"),
@@ -1964,7 +1744,7 @@ def build_ui(
                     record_service.update_water_change(
                         aquarium_id,
                         water_change.id,
-                        _parse_local_datetime(date_input.value, time_input.value),
+                        water_change_datetime.value,
                         source,
                         volume_input.value,
                         description_input.value,
@@ -1990,7 +1770,7 @@ def build_ui(
                 raise ValidationError("Select a parameter first.") from error
             record_service.record_measurement(
                 aquarium_id,
-                _parse_local_datetime(measurement_date.value, measurement_time.value),
+                measurement_datetime.value,
                 parameter_id,
                 measurement_value.value,
                 measurement_note.value,
@@ -2000,7 +1780,7 @@ def build_ui(
             return
         measurement_value.value = None
         measurement_note.value = ""
-        reset_datetime_inputs(measurement_date, measurement_time)
+        measurement_datetime.set_value(datetime.now().astimezone())
         ui.notify(t("saved_measurement"), type="positive")
         refresh_all()
 
@@ -2008,7 +1788,7 @@ def build_ui(
         try:
             record_service.add_note(
                 current_aquarium_id(),
-                _parse_local_datetime(note_date.value, note_time.value),
+                note_datetime.value,
                 note_category.value,
                 note_content.value or "",
             )
@@ -2017,7 +1797,7 @@ def build_ui(
             return
         note_category.value = ""
         note_content.value = ""
-        reset_datetime_inputs(note_date, note_time)
+        note_datetime.set_value(datetime.now().astimezone())
         ui.notify(t("saved_note"), type="positive")
         refresh_all()
 
@@ -2030,7 +1810,7 @@ def build_ui(
         try:
             record_service.add_water_change(
                 current_aquarium_id(),
-                _parse_local_datetime(water_change_date.value, water_change_time.value),
+                water_change_datetime.value,
                 source,
                 water_volume.value,
                 water_description.value,
@@ -2040,7 +1820,7 @@ def build_ui(
             return
         water_volume.value = None
         water_description.value = ""
-        reset_datetime_inputs(water_change_date, water_change_time)
+        water_change_datetime.set_value(datetime.now().astimezone())
         ui.notify(t("saved_water_change"), type="positive")
         refresh_all()
 
@@ -2052,10 +1832,7 @@ def build_ui(
                 raise ValidationError("Select a fertilizer first.") from error
             record_service.add_fertilizer_application(
                 current_aquarium_id(),
-                _parse_local_datetime(
-                    fertilizer_application_date.value,
-                    fertilizer_application_time.value,
-                ),
+                fertilizer_application_datetime.value,
                 fertilizer_id,
                 fertilizer_actual_dose.value,
                 fertilizer_application_notes.value,
@@ -2064,10 +1841,7 @@ def build_ui(
             _notify_error(error)
             return
         fertilizer_application_notes.value = ""
-        reset_datetime_inputs(
-            fertilizer_application_date,
-            fertilizer_application_time,
-        )
+        fertilizer_application_datetime.set_value(datetime.now().astimezone())
         ui.notify(t("saved_fertilizer_application"), type="positive")
         refresh_all()
 
