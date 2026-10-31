@@ -27,6 +27,7 @@ class RecordEditDialogs:
         source_options: dict[str, str],
         on_saved: Callable[[], None],
         on_error: Callable[[Exception], None],
+        show_time: bool = True,
     ) -> None:
         self._record_service = record_service
         self._parameter_service = parameter_service
@@ -36,6 +37,7 @@ class RecordEditDialogs:
         self._source_options = source_options
         self._on_saved = on_saved
         self._on_error = on_error
+        self._show_time = show_time
 
     def open_note(self, note_id: int) -> None:
         try:
@@ -47,7 +49,11 @@ class RecordEditDialogs:
 
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label(self._t("edit_note_dialog")).classes("text-h6")
-            note_datetime = DateTimePicker(self._t("date_time"), note.timestamp)
+            note_datetime = DateTimePicker(
+                self._t("date_time"),
+                note.timestamp,
+                show_time=self._show_time,
+            )
             category_input = ui.input(
                 self._t("optional_category"),
                 value=note.category or "",
@@ -98,6 +104,7 @@ class RecordEditDialogs:
             measurement_datetime = DateTimePicker(
                 self._t("date_time"),
                 measurement.timestamp,
+                show_time=self._show_time,
             )
             parameter_input = ui.select(
                 parameter_options,
@@ -134,9 +141,48 @@ class RecordEditDialogs:
                 ui.notify(self._t("updated_measurement"), type="positive")
                 self._on_saved()
 
+            def confirm_delete() -> None:
+                with ui.dialog() as confirmation, ui.card().classes("w-full max-w-md"):
+                    ui.label(self._t("confirm_delete_measurement"))
+
+                    def delete() -> None:
+                        try:
+                            self._record_service.delete_measurement(
+                                aquarium_id,
+                                measurement.id,
+                            )
+                        except (ValidationError, NotFoundError) as error:
+                            self._on_error(error)
+                            confirmation.close()
+                            return
+                        confirmation.close()
+                        dialog.close()
+                        ui.notify(
+                            self._t("deleted_measurement"),
+                            type="positive",
+                        )
+                        self._on_saved()
+
+                    with ui.row().classes("justify-end"):
+                        ui.button(
+                            self._t("cancel"),
+                            on_click=confirmation.close,
+                        ).props("flat")
+                        ui.button(
+                            self._t("delete_measurement"),
+                            icon="delete",
+                            on_click=delete,
+                        ).props("color=negative")
+                confirmation.open()
+
             with ui.row().classes("justify-end"):
                 ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
                 ui.button(self._t("save"), on_click=save, icon="save")
+                ui.button(
+                    self._t("delete_measurement"),
+                    icon="delete",
+                    on_click=confirm_delete,
+                ).props("color=negative")
         dialog.open()
 
     def open_fertilizer_application(self, application_id: int) -> None:
@@ -159,6 +205,7 @@ class RecordEditDialogs:
             application_datetime = DateTimePicker(
                 self._t("date_time"),
                 application.timestamp,
+                show_time=self._show_time,
             )
             fertilizer_input = ui.select(
                 fertilizer_options,
@@ -260,6 +307,7 @@ class RecordEditDialogs:
             water_change_datetime = DateTimePicker(
                 self._t("date_time"),
                 water_change.timestamp,
+                show_time=self._show_time,
             )
             source_input = ui.select(
                 self._source_options,

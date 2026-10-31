@@ -18,10 +18,10 @@ from aqman.services import (
 from aqman.translations import LANGUAGE_NAMES, translate
 from aqman.ui.components import (
     ActivityHistory,
+    AquariumCharts,
     AquariumDialog,
     FertilizerCatalog,
     FertilizerApplicationForm,
-    MeasurementChart,
     MeasurementForm,
     NoteForm,
     ParameterCatalog,
@@ -144,6 +144,7 @@ def build_ui(
     fertilizer_service: FertilizerService,
     record_service: RecordService,
     language: str = "en",
+    show_time_in_datetime_picker: bool = True,
 ) -> None:
     if language not in LANGUAGE_NAMES:
         language = "en"
@@ -215,6 +216,7 @@ def build_ui(
                     measurement_form = MeasurementForm(
                         language,
                         on_save=lambda form: save_measurement(form),
+                        show_time=show_time_in_datetime_picker,
                     )
 
                     fertilizer_application_form = FertilizerApplicationForm(
@@ -222,11 +224,13 @@ def build_ui(
                         current_aquarium_id,
                         language,
                         on_save=lambda form: save_fertilizer_application(form),
+                        show_time=show_time_in_datetime_picker,
                     )
 
                     NoteForm(
                         language,
                         on_save=lambda form: save_note(form),
+                        show_time=show_time_in_datetime_picker,
                     )
 
                     WaterChangeForm(
@@ -236,6 +240,7 @@ def build_ui(
                             for source, translation_key in SOURCE_TRANSLATION_KEYS.items()
                         },
                         on_save=lambda form: save_water_change(form),
+                        show_time=show_time_in_datetime_picker,
                     )
 
                     activity_history = ActivityHistory(
@@ -250,10 +255,11 @@ def build_ui(
                         _notify_error,
                     )
 
-                    measurement_chart = MeasurementChart(
+                    aquarium_charts = AquariumCharts(
                         record_service,
                         current_aquarium_id,
                         language,
+                        show_time=show_time_in_datetime_picker,
                     )
 
             with ui.tab_panel(aquariums_tab):
@@ -428,7 +434,7 @@ def build_ui(
         fertilizer_catalog.refresh()
         refresh_aquarium_details()
         activity_history.refresh()
-        measurement_chart.refresh()
+        aquarium_charts.refresh()
 
     record_edit_dialogs = RecordEditDialogs(
         record_service,
@@ -442,6 +448,7 @@ def build_ui(
         },
         on_saved=refresh_all,
         on_error=_notify_error,
+        show_time=show_time_in_datetime_picker,
     )
 
     aquarium_dialog = AquariumDialog(

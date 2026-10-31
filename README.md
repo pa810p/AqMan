@@ -47,6 +47,18 @@ when starting the application. Data is stored outside the installation directory
 `AQMAN_DATA_DIR` to use another data directory. Rotating application logs are stored in
 the `logs` subdirectory there; each log file is limited to 10 MiB with five backups.
 
+On first start, the application creates `$XDG_CONFIG_HOME/aquarium-manager/config.toml`
+(defaulting to `~/.config/aquarium-manager/config.toml`). Set `AQMAN_CONFIG_FILE` to use a
+different configuration file. Restart the application after changing it. The
+`show_time_in_datetime_picker` setting in the `[ui]` section controls whether date/time
+pickers display a time; it defaults to `false`. With time hidden, saved records use local
+midnight, while the end date in chart ranges includes the full local day.
+
+```toml
+[ui]
+show_time_in_datetime_picker = false
+```
+
 ## Tests
 
 ```bash

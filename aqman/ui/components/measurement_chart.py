@@ -1,4 +1,3 @@
-import calendar
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -8,24 +7,6 @@ from nicegui import ui
 from aqman.models import Measurement, Parameter
 from aqman.services import RecordService, ValidationError
 from aqman.translations import translate
-from aqman.ui.components.date_time_picker import DateTimePicker
-
-
-def _calendar_month_before(value: datetime) -> datetime:
-    target_month = value.month - 1
-    target_year = value.year
-    if target_month == 0:
-        target_month = 12
-        target_year -= 1
-    target_day = min(value.day, calendar.monthrange(target_year, target_month)[1])
-    return value.replace(year=target_year, month=target_month, day=target_day)
-
-
-def _default_chart_range(now: datetime | None = None) -> tuple[datetime, datetime]:
-    local_now = (now or datetime.now().astimezone()).astimezone()
-    end = local_now.replace(second=0, microsecond=0)
-    start = _calendar_month_before(end.replace(tzinfo=None))
-    return start, end
 
 
 def _measurement_chart_options(
@@ -36,7 +17,7 @@ def _measurement_chart_options(
         "animation": False,
         "backgroundColor": "transparent",
         "grid": {"left": 56, "right": 24, "top": 32, "bottom": 48, "containLabel": True},
-        "tooltip": {"trigger": "axis"},
+        "tooltip": {"trigger": "item"},
         "xAxis": {
             "type": "time",
             "axisLabel": {"formatter": "{yyyy}-{MM}-{dd}"},
@@ -52,17 +33,14 @@ def _measurement_chart_options(
         },
         "series": [
             {
-                "type": "line",
+                "type": "scatter",
                 "name": parameter.name,
                 "data": [
                     [int(measurement.timestamp.timestamp() * 1000), measurement.value]
                     for measurement in measurements
                 ],
-                "showSymbol": True,
                 "symbol": "circle",
                 "symbolSize": 8,
-                "connectNulls": False,
-                "lineStyle": {"color": "#7acb84", "width": 2},
                 "itemStyle": {"color": "#7acb84"},
             }
         ],
@@ -74,13 +52,12 @@ class MeasurementChart:
     def __init__(
         self,
         record_service: RecordService,
-        aquarium_id_provider: Callable[[], int],
         language: str,
+        on_parameter_changed: Callable[[], None],
     ) -> None:
         self._record_service = record_service
-        self._aquarium_id_provider = aquarium_id_provider
         self._language = language
-        self._chart_range_initialized = False
+        self._on_parameter_changed = on_parameter_changed
 
         with ui.card().classes("w-full col-span-2"):
             ui.label(self._t("measurement_chart")).classes("text-h6")
@@ -89,34 +66,21 @@ class MeasurementChart:
                     {},
                     label=self._t("parameter"),
                 ).classes("min-w-48 flex-1")
-                self._start = DateTimePicker(
-                    self._t("chart_start"),
-                    on_change=self.refresh,
-                )
-                self._start.element.classes("flex-1")
-                self._end = DateTimePicker(
-                    self._t("chart_end"),
-                    on_change=self.refresh,
-                )
-                self._end.element.classes("flex-1")
             self._status = ui.label().classes("text-body2")
-            self._chart = ui.echart({}).classes("w-full h-96")
+            self._chart = ui.echart({}).classes("w-full h-64")
 
-        self._parameter.on_value_change(lambda _: self.refresh())
+        self._parameter.on_value_change(lambda _: self._on_parameter_changed())
 
-    def refresh(self) -> None:
-        try:
-            aquarium_id = self._aquarium_id_provider()
-        except ValidationError:
+    def clear(self, *, reset_parameter: bool = False) -> None:
+        if reset_parameter:
             self._parameter.options = {}
             self._parameter.value = None
             self._parameter.update()
-            self._set_chart_options({})
-            self._chart.set_visibility(False)
-            self._status.set_text(self._t("chart_choose_aquarium"))
-            self._status.set_visibility(True)
-            return
+        self._set_chart_options({})
+        self._chart.set_visibility(False)
+        self._status.set_visibility(False)
 
+    def refresh(self, aquarium_id: int, start: datetime, end: datetime) -> None:
         parameters = self._record_service.measured_parameters(aquarium_id)
         parameter_options = {
             parameter.id: f"{parameter.name} ({parameter.unit})"
@@ -142,12 +106,6 @@ class MeasurementChart:
             self._status.set_visibility(True)
             return
 
-        if not self._chart_range_initialized:
-            start, end = _default_chart_range()
-            self._start.set_value(start)
-            self._end.set_value(end)
-            self._chart_range_initialized = True
-
         if parameter_id is None:
             self._set_chart_options({})
             self._chart.set_visibility(False)
@@ -156,14 +114,6 @@ class MeasurementChart:
             return
 
         try:
-            start = self._start.value
-            end = self._end.value
-            if start > end:
-                self._set_chart_options({})
-                self._chart.set_visibility(False)
-                self._status.set_text(self._t("chart_invalid_range"))
-                self._status.set_visibility(True)
-                return
             measurements = self._record_service.measurements_in_range(
                 aquarium_id,
                 parameter_id,

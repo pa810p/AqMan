@@ -20,6 +20,8 @@ from aqman.services import (
 from aqman.translations import translate
 from aqman.ui.components.date_time_picker import DateTimePicker
 
+_SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
 
 @dataclass(frozen=True)
 class FertilizerApplicationValues:
@@ -29,6 +31,10 @@ class FertilizerApplicationValues:
     notes: str | None
 
 
+def _format_parameter_name(name: str) -> str:
+    return name.translate(_SUBSCRIPT_DIGITS)
+
+
 class FertilizerApplicationForm:
     def __init__(
         self,
@@ -36,6 +42,7 @@ class FertilizerApplicationForm:
         aquarium_id_provider: Callable[[], int],
         language: str,
         on_save: Callable[[FertilizerApplicationForm], None],
+        show_time: bool = True,
     ) -> None:
         self._aquarium_service = aquarium_service
         self._aquarium_id_provider = aquarium_id_provider
@@ -45,7 +52,10 @@ class FertilizerApplicationForm:
 
         with ui.card().classes("w-full"):
             ui.label(self._t("new_fertilizer_application")).classes("text-h6")
-            self._datetime = DateTimePicker(self._t("date_time"))
+            self._datetime = DateTimePicker(
+                self._t("date_time"),
+                show_time=show_time,
+            )
             self._fertilizer = ui.select(
                 {},
                 label=self._t("fertilizer"),
@@ -66,6 +76,7 @@ class FertilizerApplicationForm:
                 self._t("fertilizer_actual_dose"),
                 min=0,
             ).classes("w-full")
+            self._target_effect_preview = ui.label("—").classes("text-body2")
             self._other_effects = ui.label(
                 self._t("fertilizer_effects_unavailable")
             ).classes("text-body2")
@@ -212,6 +223,7 @@ class FertilizerApplicationForm:
     def _refresh_effect_preview(self) -> None:
         fertilizer = self._selected_fertilizer()
         if fertilizer is None:
+            self._target_effect_preview.text = "—"
             self._other_effects.text = self._t("fertilizer_effects_unavailable")
             return
         try:
@@ -230,16 +242,28 @@ class FertilizerApplicationForm:
             )
             target_parameter_id = int(self._target_parameter.value)
         except (TypeError, ValueError, ValidationError, NotFoundError):
+            self._target_effect_preview.text = "—"
             self._other_effects.text = self._t("fertilizer_effects_unavailable")
             return
+        target_effect = predicted_effects.get(target_parameter_id)
+        parameter_names = {
+            effect.parameter_id: _format_parameter_name(effect.parameter.name)
+            for effect in fertilizer.effects
+        }
+        target_parameter_name = parameter_names.get(target_parameter_id)
+        self._target_effect_preview.text = (
+            self._t(
+                "fertilizer_effect_line",
+                parameter=_format_parameter_name(target_parameter_name),
+                ppm=target_effect,
+            )
+            if target_effect is not None and target_parameter_name is not None
+            else "—"
+        )
         remaining_effects = [
             self._t(
                 "fertilizer_effect_line",
-                parameter=next(
-                    effect.parameter.name
-                    for effect in fertilizer.effects
-                    if effect.parameter_id == parameter_id
-                ),
+                parameter=parameter_names[parameter_id],
                 ppm=ppm,
             )
             for parameter_id, ppm in predicted_effects.items()

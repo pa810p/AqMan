@@ -22,13 +22,17 @@ class NoteForm:
         self,
         language: str,
         on_save: Callable[[NoteForm], None],
+        show_time: bool = True,
     ) -> None:
         self._language = language
         self._on_save = on_save
 
         with ui.card().classes("w-full"):
             ui.label(self._t("new_note")).classes("text-h6")
-            self._datetime = DateTimePicker(self._t("date_time"))
+            self._datetime = DateTimePicker(
+                self._t("date_time"),
+                show_time=show_time,
+            )
             self._category = ui.input(
                 self._t("optional_category")
             ).classes("w-full")

@@ -115,6 +115,68 @@ def test_fertilizer_application_history_is_grouped_by_local_day(application_serv
     assert history[1].fertilizer_applications[0].fertilizer.name == "Nitro"
 
 
+def test_fertilizer_applications_in_range_are_inclusive_scoped_and_ordered(
+    application_services,
+) -> None:
+    aquariums, _, _, records, _ = application_services
+    aquarium, fertilizer = create_fertilizer(application_services)
+    other_aquarium = aquariums.create_aquarium("Other tank", 50, None)
+    start = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
+    records.add_fertilizer_application(
+        aquarium.id,
+        start.replace(hour=11),
+        fertilizer.id,
+        4,
+        None,
+    )
+    first = records.add_fertilizer_application(
+        aquarium.id,
+        start,
+        fertilizer.id,
+        5,
+        None,
+    )
+    last = records.add_fertilizer_application(
+        aquarium.id,
+        end,
+        fertilizer.id,
+        6,
+        None,
+    )
+    records.add_fertilizer_application(
+        aquarium.id,
+        end.replace(hour=13),
+        fertilizer.id,
+        7,
+        None,
+    )
+    records.add_fertilizer_application(
+        other_aquarium.id,
+        start,
+        fertilizer.id,
+        8,
+        None,
+    )
+
+    applications = records.fertilizer_applications_in_range(
+        aquarium.id,
+        start,
+        end,
+    )
+
+    assert [application.id for application in applications] == [first.id, last.id]
+    assert all(
+        application.fertilizer.name == fertilizer.name
+        for application in applications
+    )
+
+    with pytest.raises(ValidationError, match="Start date must not be after end date"):
+        records.fertilizer_applications_in_range(aquarium.id, end, start)
+    with pytest.raises(NotFoundError, match="Aquarium not found"):
+        records.fertilizer_applications_in_range(999, start, end)
+
+
 def test_fertilizer_applications_are_scoped_and_protect_catalog_history(
     application_services,
 ) -> None:

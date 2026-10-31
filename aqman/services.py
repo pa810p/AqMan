@@ -579,6 +579,26 @@ class RecordService:
                 raise NotFoundError("Aquarium not found.")
             return repositories.list_fertilizer_applications(session, aquarium_id)
 
+    def fertilizer_applications_in_range(
+        self,
+        aquarium_id: int,
+        start: datetime,
+        end: datetime,
+    ) -> list[FertilizerApplication]:
+        clean_start = _utc_datetime(start)
+        clean_end = _utc_datetime(end)
+        if clean_start > clean_end:
+            raise ValidationError("Start date must not be after end date.")
+        with self._session_factory() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            return repositories.list_fertilizer_applications_in_range(
+                session,
+                aquarium_id,
+                clean_start,
+                clean_end,
+            )
+
     def record_measurement(
         self,
         aquarium_id: int,
@@ -644,6 +664,24 @@ class RecordService:
             parameter_id,
         )
         return measurement
+
+    def delete_measurement(self, aquarium_id: int, measurement_id: int) -> None:
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            measurement = repositories.get_measurement(
+                session,
+                aquarium_id,
+                measurement_id,
+            )
+            if measurement is None:
+                raise NotFoundError("Measurement not found.")
+            repositories.delete_measurement(session, measurement)
+        logger.info(
+            "Deleted measurement id=%s aquarium_id=%s",
+            measurement_id,
+            aquarium_id,
+        )
 
     def add_note(
         self,

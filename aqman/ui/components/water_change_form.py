@@ -26,13 +26,17 @@ class WaterChangeForm:
         language: str,
         source_options: dict[str, str],
         on_save: Callable[[WaterChangeForm], None],
+        show_time: bool = True,
     ) -> None:
         self._language = language
         self._on_save = on_save
 
         with ui.card().classes("w-full"):
             ui.label(self._t("new_water_change")).classes("text-h6")
-            self._datetime = DateTimePicker(self._t("date_time"))
+            self._datetime = DateTimePicker(
+                self._t("date_time"),
+                show_time=show_time,
+            )
             self._source = ui.select(
                 source_options,
                 label=self._t("water_source"),

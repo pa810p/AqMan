@@ -167,6 +167,33 @@ def test_measurement_can_be_edited_and_moved_to_another_day(services) -> None:
     assert daily_history.measurements[nitrate.id][0].id == original_measurement.id
 
 
+def test_measurement_can_be_deleted_and_deletion_is_scoped_to_aquarium(services) -> None:
+    aquariums, parameters, records = services
+    aquarium = aquariums.create_aquarium("Nano", 35, None)
+    other_aquarium = aquariums.create_aquarium("Other", 40, None)
+    parameter = parameters.create_parameter("NO3", "mg/L", None)
+    records.record_measurement(
+        aquarium.id,
+        datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc),
+        parameter.id,
+        5,
+        None,
+    )
+    [measurement] = records.measurements(aquarium.id)
+
+    with pytest.raises(NotFoundError, match="Measurement not found"):
+        records.delete_measurement(other_aquarium.id, measurement.id)
+    assert len(records.measurements(aquarium.id)) == 1
+
+    records.delete_measurement(aquarium.id, measurement.id)
+
+    assert records.measurements(aquarium.id) == []
+    assert records.daily_history(aquarium.id) == []
+    assert records.measured_parameters(aquarium.id) == []
+    with pytest.raises(NotFoundError, match="Measurement not found"):
+        records.delete_measurement(aquarium.id, measurement.id)
+
+
 def test_measurement_edit_is_scoped_to_its_aquarium(services) -> None:
     aquariums, parameters, records = services
     aquarium = aquariums.create_aquarium("Nano", 35, None)

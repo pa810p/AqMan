@@ -85,6 +85,7 @@ def main() -> None:
             fertilizer_service,
             record_service,
             language=language,
+            show_time_in_datetime_picker=settings.show_time_in_datetime_picker,
         )
 
     logger.info("Starting NiceGUI server.")

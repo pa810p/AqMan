@@ -25,13 +25,17 @@ class MeasurementForm:
         self,
         language: str,
         on_save: Callable[[MeasurementForm], None],
+        show_time: bool = True,
     ) -> None:
         self._language = language
         self._on_save = on_save
 
         with ui.card().classes("w-full"):
             ui.label(self._t("add_measurement")).classes("text-h6")
-            self._datetime = DateTimePicker(self._t("date_time"))
+            self._datetime = DateTimePicker(
+                self._t("date_time"),
+                show_time=show_time,
+            )
             self._parameter = ui.select(
                 {},
                 label=self._t("parameter"),

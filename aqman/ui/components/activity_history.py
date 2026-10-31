@@ -50,61 +50,11 @@ class ActivityHistory:
                 ui.label(self._t("empty_history"))
                 return
 
-            parameter_details = {
-                parameter_id: (
-                    measurements[0].parameter.name,
-                    measurements[0].parameter.unit,
-                )
-                for day in daily_history
-                for parameter_id, measurements in day.measurements.items()
-            }
-            parameter_ids = sorted(
-                parameter_details,
-                key=lambda parameter_id: (
-                    parameter_details[parameter_id][0].casefold(),
-                    parameter_details[parameter_id][1].casefold(),
-                ),
+            columns, parameter_ids, fertilizer_ids = self._history_columns(
+                daily_history
             )
-            columns = [
-                {
-                    "name": "date",
-                    "label": self._t("history_date"),
-                    "field": "date",
-                    "align": "left",
-                },
-                *[
-                    {
-                        "name": f"parameter_{parameter_id}",
-                        "label": (
-                            f"{parameter_details[parameter_id][0]} "
-                            f"({parameter_details[parameter_id][1]})"
-                        ),
-                        "field": f"parameter_{parameter_id}",
-                        "align": "right",
-                    }
-                    for parameter_id in parameter_ids
-                ],
-                {
-                    "name": "fertilizer_applications",
-                    "label": self._t("history_fertilizer_applications"),
-                    "field": "fertilizer_applications",
-                    "align": "left",
-                },
-                {
-                    "name": "water_changes",
-                    "label": self._t("history_water_changes"),
-                    "field": "water_changes",
-                    "align": "left",
-                },
-                {
-                    "name": "notes",
-                    "label": self._t("history_notes"),
-                    "field": "notes",
-                    "align": "left",
-                },
-            ]
             rows = [
-                self._history_row(day, parameter_ids)
+                self._history_row(day, parameter_ids, fertilizer_ids)
                 for day in daily_history
             ]
             history_table = ui.table(
@@ -113,13 +63,86 @@ class ActivityHistory:
                 row_key="id",
             ).classes("w-full")
             self._add_measurement_slots(history_table, parameter_ids)
+            self._add_fertilizer_slots(history_table, fertilizer_ids)
             self._add_record_slots(history_table)
             self._connect_edit_handlers(history_table)
+
+    def _history_columns(
+        self,
+        daily_history: list[DailyAquariumHistory],
+    ) -> tuple[list[dict[str, str]], list[int], list[int]]:
+        parameter_details = {
+            parameter_id: (
+                measurements[0].parameter.name,
+                measurements[0].parameter.unit,
+            )
+            for day in daily_history
+            for parameter_id, measurements in day.measurements.items()
+        }
+        parameter_ids = sorted(
+            parameter_details,
+            key=lambda parameter_id: (
+                parameter_details[parameter_id][0].casefold(),
+                parameter_details[parameter_id][1].casefold(),
+            ),
+        )
+        fertilizer_details = {
+            application.fertilizer_id: application.fertilizer.name
+            for day in daily_history
+            for application in day.fertilizer_applications
+        }
+        fertilizer_ids = sorted(
+            fertilizer_details,
+            key=lambda fertilizer_id: fertilizer_details[fertilizer_id].casefold(),
+        )
+        columns = [
+            {
+                "name": "date",
+                "label": self._t("history_date"),
+                "field": "date",
+                "align": "left",
+            },
+            *[
+                {
+                    "name": f"parameter_{parameter_id}",
+                    "label": (
+                        f"{parameter_details[parameter_id][0]} "
+                        f"({parameter_details[parameter_id][1]})"
+                    ),
+                    "field": f"parameter_{parameter_id}",
+                    "align": "right",
+                }
+                for parameter_id in parameter_ids
+            ],
+            *[
+                {
+                    "name": f"fertilizer_{fertilizer_id}",
+                    "label": fertilizer_details[fertilizer_id],
+                    "field": f"fertilizer_{fertilizer_id}",
+                    "align": "right",
+                }
+                for fertilizer_id in fertilizer_ids
+            ],
+            {
+                "name": "water_changes",
+                "label": self._t("history_water_changes"),
+                "field": "water_changes",
+                "align": "left",
+            },
+            {
+                "name": "notes",
+                "label": self._t("history_notes"),
+                "field": "notes",
+                "align": "left",
+            },
+        ]
+        return columns, parameter_ids, fertilizer_ids
 
     def _history_row(
         self,
         day: DailyAquariumHistory,
         parameter_ids: list[int],
+        fertilizer_ids: list[int],
     ) -> dict[str, object]:
         note_links = [
             {
@@ -158,13 +181,6 @@ class ActivityHistory:
                 }
                 for water_change in day.water_changes
             ],
-            "fertilizer_applications": [
-                {
-                    "id": application.id,
-                    "label": self._format_fertilizer_application(application),
-                }
-                for application in day.fertilizer_applications
-            ],
             "notes": note_links,
         }
         for parameter_id in parameter_ids:
@@ -174,6 +190,15 @@ class ActivityHistory:
                     "value": f"{measurement.value:g}",
                 }
                 for measurement in day.measurements.get(parameter_id, ())
+            ]
+        for fertilizer_id in fertilizer_ids:
+            row[f"fertilizer_{fertilizer_id}"] = [
+                {
+                    "id": application.id,
+                    "label": self._format_fertilizer_dose(application),
+                }
+                for application in day.fertilizer_applications
+                if application.fertilizer_id == fertilizer_id
             ]
         return row
 
@@ -187,13 +212,9 @@ class ActivityHistory:
             return f"{entry} ({water_change.description})"
         return entry
 
-    def _format_fertilizer_application(
-        self,
-        application: FertilizerApplication,
-    ) -> str:
+    def _format_fertilizer_dose(self, application: FertilizerApplication) -> str:
         return self._t(
-            "history_fertilizer_application_entry",
-            name=application.fertilizer.name,
+            "history_fertilizer_dose_entry",
             dose=application.actual_dose_ml,
         )
 
@@ -225,13 +246,15 @@ class ActivityHistory:
                 ),
             )
 
-    def _add_record_slots(self, history_table) -> None:
-        history_table.add_slot(
-            "body-cell-fertilizer_applications",
-            """
+    def _add_fertilizer_slots(self, history_table, fertilizer_ids: list[int]) -> None:
+        for fertilizer_id in fertilizer_ids:
+            column_name = f"fertilizer_{fertilizer_id}"
+            history_table.add_slot(
+                f"body-cell-{column_name}",
+                """
             <q-td :props="props">
                 <span
-                    v-for="(application, index) in props.row.fertilizer_applications"
+                    v-for="(application, index) in props.row.__COLUMN__"
                     :key="application.id"
                 >
                     <a
@@ -242,11 +265,15 @@ class ActivityHistory:
                         {{ application.label }}
                         <q-tooltip>__EDIT_LABEL__</q-tooltip>
                     </a>
-                    <span v-if="index + 1 < props.row.fertilizer_applications.length">; </span>
+                    <span v-if="index + 1 < props.row.__COLUMN__.length">; </span>
                 </span>
             </q-td>
-            """.replace("__EDIT_LABEL__", self._t("edit_fertilizer_application")),
-        )
+            """
+                .replace("__COLUMN__", column_name)
+                .replace("__EDIT_LABEL__", self._t("edit_fertilizer_application")),
+            )
+
+    def _add_record_slots(self, history_table) -> None:
         history_table.add_slot(
             "body-cell-water_changes",
             """

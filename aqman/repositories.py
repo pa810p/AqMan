@@ -188,6 +188,25 @@ def list_fertilizer_applications(
     return list(session.scalars(statement))
 
 
+def list_fertilizer_applications_in_range(
+    session: Session,
+    aquarium_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[FertilizerApplication]:
+    statement = (
+        select(FertilizerApplication)
+        .where(
+            FertilizerApplication.aquarium_id == aquarium_id,
+            FertilizerApplication.timestamp >= start,
+            FertilizerApplication.timestamp <= end,
+        )
+        .options(selectinload(FertilizerApplication.fertilizer))
+        .order_by(FertilizerApplication.timestamp, FertilizerApplication.id)
+    )
+    return list(session.scalars(statement))
+
+
 def delete_fertilizer_application(
     session: Session,
     application: FertilizerApplication,
@@ -290,6 +309,10 @@ def get_measurement(
         .options(selectinload(Measurement.parameter))
     )
     return session.scalar(statement)
+
+
+def delete_measurement(session: Session, measurement: Measurement) -> None:
+    session.delete(measurement)
 
 
 def list_measurements(session: Session, aquarium_id: int) -> list[Measurement]:

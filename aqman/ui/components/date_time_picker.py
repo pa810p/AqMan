@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from nicegui import ui
 from nicegui.element import Element
@@ -19,18 +19,32 @@ def _local_datetime_parts(value: datetime | None = None) -> tuple[str, str]:
     return local_value.strftime("%Y-%m-%d"), local_value.strftime("%H:%M")
 
 
-def _local_datetime_input_value(value: datetime | None = None) -> str:
+def _local_datetime_input_value(
+    value: datetime | None = None,
+    *,
+    show_time: bool = True,
+) -> str:
     date_value, time_value = _local_datetime_parts(value)
-    return f"{date_value} {time_value}"
+    return f"{date_value} {time_value}" if show_time else date_value
 
 
-def _parse_local_datetime_value(value: str | None) -> datetime:
-    if not value or not ("T" in value or " " in value):
-        raise ValidationError("Enter a date and time.")
+def _parse_local_datetime_value(
+    value: str | None,
+    *,
+    show_time: bool = True,
+) -> datetime:
+    if not value:
+        raise ValidationError("Enter a date and time." if show_time else "Enter a date.")
     try:
-        parsed = datetime.fromisoformat(value)
+        if show_time:
+            if not ("T" in value or " " in value):
+                raise ValidationError("Enter a date and time.")
+            parsed = datetime.fromisoformat(value)
+        else:
+            parsed = datetime.combine(date.fromisoformat(value), time.min)
     except ValueError as error:
-        raise ValidationError("Enter a valid date and time.") from error
+        message = "Enter a valid date and time." if show_time else "Enter a valid date."
+        raise ValidationError(message) from error
     if parsed.tzinfo is None:
         parsed = parsed.astimezone()
     return parsed.astimezone(timezone.utc)
@@ -42,15 +56,17 @@ class DateTimePicker:
         label: str,
         value: datetime | None = None,
         on_change: Callable[[], None] | None = None,
+        show_time: bool = True,
     ) -> None:
         self._on_change = on_change
+        self._show_time = show_time
         initial_date, initial_time = _local_datetime_parts(value)
         hour = int(initial_time[:2])
         minute = int(initial_time[3:])
         self._time_parts = {"hour": hour, "minute": minute}
         self.element = ui.input(
             label,
-            value=_local_datetime_input_value(value),
+            value=_local_datetime_input_value(value, show_time=show_time),
         ).props("readonly").classes("min-w-64")
 
         def update_time_part(part: str, selected_value: int) -> None:
@@ -61,7 +77,10 @@ class DateTimePicker:
             with ui.menu().props("no-parent-event") as self._menu:
                 with ui.row().classes("no-wrap items-start"):
                     self._date_picker = ui.date(initial_date, mask="YYYY-MM-DD")
-                    with ui.column().classes("items-center gap-0"):
+                    time_controls_classes = "items-center gap-0"
+                    if not show_time:
+                        time_controls_classes += " hidden"
+                    with ui.column().classes(time_controls_classes):
                         ui.label("HH").classes("text-caption")
                         (
                             self._set_hour,
@@ -72,7 +91,7 @@ class DateTimePicker:
                             hour,
                             lambda selected_value: update_time_part("hour", selected_value),
                         )
-                    with ui.column().classes("items-center gap-0"):
+                    with ui.column().classes(time_controls_classes):
                         ui.label("MM").classes("text-caption")
                         (
                             self._set_minute,
@@ -93,7 +112,10 @@ class DateTimePicker:
 
     @property
     def value(self) -> datetime:
-        return _parse_local_datetime_value(self.element.value)
+        return _parse_local_datetime_value(
+            self.element.value,
+            show_time=self._show_time,
+        )
 
     def set_value(self, value: datetime) -> None:
         date_value, time_value = _local_datetime_parts(value)
@@ -103,7 +125,10 @@ class DateTimePicker:
         self._time_parts["minute"] = int(time_value[3:])
         self._set_hour(self._time_parts["hour"])
         self._set_minute(self._time_parts["minute"])
-        self.element.value = _local_datetime_input_value(value)
+        self.element.value = _local_datetime_input_value(
+            value,
+            show_time=self._show_time,
+        )
         self.element.update()
 
     def _create_numeric_wheel(
@@ -216,6 +241,8 @@ class DateTimePicker:
         self.element.value = (
             f"{self._date_picker.value} "
             f"{self._time_parts['hour']:02d}:{self._time_parts['minute']:02d}"
+            if self._show_time
+            else str(self._date_picker.value)
         )
         self.element.update()
         if self._on_change is not None:
@@ -226,9 +253,12 @@ class DateTimePicker:
         self._center_minute()
 
     def _open_menu(self) -> None:
-        self._suspend_hour_scroll()
-        self._suspend_minute_scroll()
+        if self._show_time:
+            self._suspend_hour_scroll()
+            self._suspend_minute_scroll()
         self._menu.open()
+        if not self._show_time:
+            return
         ui.timer(
             TIME_WHEEL_OPEN_DELAY_SECONDS,
             self._center_time_wheels,
