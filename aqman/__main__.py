@@ -42,8 +42,11 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Aquarium Manager.")
     parser.add_argument("--mode", choices=("browser", "native"), default="browser")
     parser.add_argument("--host", default=os.environ.get("AQMAN_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("AQMAN_PORT", "8080")))
-    return parser.parse_args()
+    parser.add_argument("--port", type=int)
+    args = parser.parse_args()
+    if args.port is not None and not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535.")
+    return args
 
 
 def main() -> None:
@@ -52,6 +55,7 @@ def main() -> None:
         _validate_native_dependencies()
 
     settings = get_settings()
+    port = args.port if args.port is not None else settings.port
     settings.data_directory.mkdir(parents=True, exist_ok=True)
     logger = configure_logging(
         log_level="DEBUG",
@@ -62,7 +66,7 @@ def main() -> None:
         "Starting Aquarium Manager mode=%s host=%s port=%s",
         args.mode,
         args.host,
-        args.port,
+        port,
     )
     project_root = Path(__file__).resolve().parents[1]
     upgrade_database(settings.database_url, project_root)
@@ -92,7 +96,7 @@ def main() -> None:
     ui.run(
         native=args.mode == "native",
         host=args.host,
-        port=args.port,
+        port=port,
         title="Aquarium Manager",
         window_size=(1280, 800),
         reload=False,

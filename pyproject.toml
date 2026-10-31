@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 desktop = ["pywebview>=5,<7"]
-test = ["pytest>=8,<9"]
+test = ["pytest>=8,<9", "pytest-cov>=5,<8"]
 
 [project.scripts]
 aqman = "aqman.__main__:main"
@@ -27,3 +27,8 @@ include = ["aqman*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = [
+    "--cov=aqman",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]

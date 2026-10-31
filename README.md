@@ -52,15 +52,25 @@ On first start, the application creates `$XDG_CONFIG_HOME/aquarium-manager/confi
 different configuration file. Restart the application after changing it. The
 `show_time_in_datetime_picker` setting in the `[ui]` section controls whether date/time
 pickers display a time; it defaults to `false`. With time hidden, saved records use local
-midnight, while the end date in chart ranges includes the full local day.
+midnight, while the end date in chart ranges includes the full local day. The `[server]`
+section configures the listening port; `--port` takes precedence over `AQMAN_PORT`, which
+takes precedence over the configured value.
 
 ```toml
+[server]
+port = 8080
+
 [ui]
 show_time_in_datetime_picker = false
 ```
 
 ## Tests
 
+Install the test dependencies with `python -m pip install -e '.[test]'`, then run:
+
 ```bash
 pytest
 ```
+
+Pytest reports coverage for the `aqman` package in the terminal and generates an HTML
+report at `htmlcov/index.html`.

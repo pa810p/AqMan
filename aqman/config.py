@@ -5,7 +5,10 @@ from pathlib import Path
 
 from sqlalchemy.engine import URL
 
-_DEFAULT_CONFIG = """[ui]
+_DEFAULT_CONFIG = """[server]
+port = 8080
+
+[ui]
 show_time_in_datetime_picker = false
 """
 
@@ -15,6 +18,7 @@ class Settings:
     data_directory: Path
     config_file: Path
     show_time_in_datetime_picker: bool
+    port: int
 
     @property
     def database_path(self) -> Path:
@@ -47,15 +51,16 @@ def get_settings() -> Settings:
         xdg_config_home = Path(configured_xdg_home).expanduser()
         config_file = xdg_config_home / "aquarium-manager" / "config.toml"
 
-    show_time_in_datetime_picker = _load_show_time_setting(config_file)
+    show_time_in_datetime_picker, port = _load_configuration(config_file)
     return Settings(
         data_directory=data_directory,
         config_file=config_file,
         show_time_in_datetime_picker=show_time_in_datetime_picker,
+        port=port,
     )
 
 
-def _load_show_time_setting(config_file: Path) -> bool:
+def _load_configuration(config_file: Path) -> tuple[bool, int]:
     try:
         config_file.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
@@ -82,9 +87,35 @@ def _load_show_time_setting(config_file: Path) -> bool:
     ui_settings = config.get("ui", {})
     if not isinstance(ui_settings, dict):
         raise ValueError(f"The [ui] section in {config_file} must be a table.")
+    server_settings = config.get("server", {})
+    if not isinstance(server_settings, dict):
+        raise ValueError(f"The [server] section in {config_file} must be a table.")
+
     show_time = ui_settings.get("show_time_in_datetime_picker", False)
     if not isinstance(show_time, bool):
         raise ValueError(
             f"ui.show_time_in_datetime_picker in {config_file} must be true or false."
         )
-    return show_time
+
+    port = _validate_port(
+        server_settings.get("port", 8080),
+        f"server.port in {config_file}",
+    )
+    environment_port = os.environ.get("AQMAN_PORT")
+    if environment_port is not None:
+        try:
+            port = int(environment_port)
+        except ValueError as error:
+            raise ValueError("AQMAN_PORT must be an integer between 1 and 65535.") from error
+        port = _validate_port(port, "AQMAN_PORT")
+    return show_time, port
+
+
+def _validate_port(value: object, source: str) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 1 <= value <= 65535
+    ):
+        raise ValueError(f"{source} must be an integer between 1 and 65535.")
+    return value
