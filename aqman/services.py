@@ -349,6 +349,36 @@ class RecordService:
                 raise NotFoundError("Aquarium not found.")
             return repositories.list_measurements(session, aquarium_id)
 
+    def measured_parameters(self, aquarium_id: int) -> list[Parameter]:
+        with self._session_factory() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            return repositories.list_measured_parameters(session, aquarium_id)
+
+    def measurements_in_range(
+        self,
+        aquarium_id: int,
+        parameter_id: int,
+        start: datetime,
+        end: datetime,
+    ) -> list[Measurement]:
+        clean_start = _utc_datetime(start)
+        clean_end = _utc_datetime(end)
+        if clean_start > clean_end:
+            raise ValidationError("Start date must not be after end date.")
+        with self._session_factory() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            if repositories.get_parameter(session, parameter_id) is None:
+                raise NotFoundError("Parameter not found.")
+            return repositories.list_measurements_in_range(
+                session,
+                aquarium_id,
+                parameter_id,
+                clean_start,
+                clean_end,
+            )
+
     def daily_history(self, aquarium_id: int) -> list[DailyAquariumHistory]:
         with self._session_factory() as session:
             if repositories.get_aquarium(session, aquarium_id) is None:

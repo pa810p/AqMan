@@ -164,6 +164,70 @@ def test_measurement_edit_is_scoped_to_its_aquarium(services) -> None:
     assert unchanged_measurement.value == 6.8
 
 
+def test_measured_parameters_are_scoped_and_ordered_by_latest_measurement(services) -> None:
+    aquariums, parameters, records = services
+    aquarium = aquariums.create_aquarium("Nano", 35, None)
+    other_aquarium = aquariums.create_aquarium("Other", 40, None)
+    nitrate = parameters.create_parameter("NO3", "mg/L", None)
+    phosphate = parameters.create_parameter("PO4", "mg/L", None)
+    unused = parameters.create_parameter("K", "mg/L", None)
+    start = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    later = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+    records.record_measurement(aquarium.id, start, nitrate.id, 5, None)
+    records.record_measurement(aquarium.id, later, phosphate.id, 0.2, None)
+    records.record_measurement(other_aquarium.id, later, unused.id, 3, None)
+
+    measured = records.measured_parameters(aquarium.id)
+
+    assert [parameter.name for parameter in measured] == ["PO4", "NO3"]
+
+
+def test_measurements_in_range_are_sorted_and_include_both_boundaries(services) -> None:
+    aquariums, parameters, records = services
+    aquarium = aquariums.create_aquarium("Nano", 35, None)
+    other_aquarium = aquariums.create_aquarium("Other", 40, None)
+    nitrate = parameters.create_parameter("NO3", "mg/L", None)
+    phosphate = parameters.create_parameter("PO4", "mg/L", None)
+    start = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    middle = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
+    records.record_measurement(
+        aquarium.id,
+        start - timedelta(seconds=1),
+        nitrate.id,
+        1,
+        None,
+    )
+    records.record_measurement(aquarium.id, end, nitrate.id, 3, None)
+    records.record_measurement(aquarium.id, middle, phosphate.id, 0.2, None)
+    records.record_measurement(aquarium.id, middle, nitrate.id, 2, None)
+    records.record_measurement(other_aquarium.id, middle, nitrate.id, 99, None)
+
+    measurements = records.measurements_in_range(
+        aquarium.id,
+        nitrate.id,
+        start,
+        end,
+    )
+
+    assert [measurement.value for measurement in measurements] == [2, 3]
+    assert [measurement.timestamp for measurement in measurements] == [middle, end]
+
+
+def test_measurements_in_range_rejects_reversed_bounds(services) -> None:
+    aquariums, parameters, records = services
+    aquarium = aquariums.create_aquarium("Nano", 35, None)
+    nitrate = parameters.create_parameter("NO3", "mg/L", None)
+
+    with pytest.raises(ValidationError, match="Start date must not be after end date"):
+        records.measurements_in_range(
+            aquarium.id,
+            nitrate.id,
+            datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc),
+            datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+
 def test_notes_and_water_changes_are_saved_separately(services) -> None:
     aquariums, _, records = services
     aquarium = aquariums.create_aquarium("Community", 180, None)

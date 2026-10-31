@@ -285,6 +285,44 @@ def list_measurements(session: Session, aquarium_id: int) -> list[Measurement]:
     return list(session.scalars(statement))
 
 
+def list_measured_parameters(session: Session, aquarium_id: int) -> list[Parameter]:
+    latest_measurement_at = func.max(Measurement.timestamp)
+    statement = (
+        select(Parameter)
+        .join(Measurement, Measurement.parameter_id == Parameter.id)
+        .where(Measurement.aquarium_id == aquarium_id)
+        .group_by(Parameter.id)
+        .order_by(
+            latest_measurement_at.desc(),
+            Parameter.name,
+            Parameter.unit,
+            Parameter.id,
+        )
+    )
+    return list(session.scalars(statement))
+
+
+def list_measurements_in_range(
+    session: Session,
+    aquarium_id: int,
+    parameter_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[Measurement]:
+    statement = (
+        select(Measurement)
+        .where(
+            Measurement.aquarium_id == aquarium_id,
+            Measurement.parameter_id == parameter_id,
+            Measurement.timestamp >= start,
+            Measurement.timestamp <= end,
+        )
+        .options(selectinload(Measurement.parameter))
+        .order_by(Measurement.timestamp, Measurement.id)
+    )
+    return list(session.scalars(statement))
+
+
 def add_note(
     session: Session,
     *,
