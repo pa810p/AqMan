@@ -5,7 +5,11 @@ from collections.abc import Callable
 from nicegui import ui
 
 from aqman.models import Parameter
-from aqman.services import ParameterService, ValidationError
+from aqman.services import (
+    NotFoundError,
+    ParameterService,
+    ValidationError,
+)
 from aqman.translations import translate
 
 
@@ -43,38 +47,20 @@ class ParameterCatalog:
             if not parameters:
                 ui.label(self._t("empty_parameters"))
                 return
-            ui.table(
-                columns=[
-                    {
-                        "name": "name",
-                        "label": self._t("parameter"),
-                        "field": "name",
-                        "align": "left",
-                    },
-                    {
-                        "name": "unit",
-                        "label": self._t("table_unit"),
-                        "field": "unit",
-                        "align": "left",
-                    },
-                    {
-                        "name": "description",
-                        "label": self._t("description"),
-                        "field": "description",
-                        "align": "left",
-                    },
-                ],
-                rows=[
-                    {
-                        "id": parameter.id,
-                        "name": parameter.name,
-                        "unit": parameter.unit,
-                        "description": parameter.description or "",
-                    }
-                    for parameter in parameters
-                ],
-                row_key="id",
-            ).classes("w-full")
+            for parameter in parameters:
+                with ui.row().classes("w-full items-start justify-between"):
+                    with ui.column().classes("gap-1"):
+                        ui.label(parameter.name).classes("text-subtitle1")
+                        ui.label(parameter.unit).classes("text-body2")
+                        if parameter.description:
+                            ui.label(parameter.description).classes("text-body2")
+                    ui.button(
+                        icon="delete",
+                        on_click=lambda parameter_id=parameter.id: self.confirm_delete(
+                            parameter_id
+                        ),
+                    ).props("flat round").tooltip(self._t("delete_parameter"))
+                ui.separator()
 
     def open_dialog(self) -> None:
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
@@ -103,6 +89,33 @@ class ParameterCatalog:
                 ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
                 ui.button(self._t("save"), on_click=save, icon="save")
         dialog.open()
+
+    def confirm_delete(self, parameter_id: int) -> None:
+        with ui.dialog() as confirmation, ui.card().classes("w-full max-w-md"):
+            ui.label(self._t("confirm_delete_parameter"))
+
+            def delete() -> None:
+                try:
+                    self._parameter_service.delete_parameter(parameter_id)
+                except (NotFoundError, ValidationError) as error:
+                    confirmation.close()
+                    self._on_error(error)
+                    return
+                confirmation.close()
+                ui.notify(self._t("deleted_parameter"), type="positive")
+                self._on_saved()
+
+            with ui.row().classes("justify-end"):
+                ui.button(
+                    self._t("cancel"),
+                    on_click=confirmation.close,
+                ).props("flat")
+                ui.button(
+                    self._t("delete_parameter"),
+                    icon="delete",
+                    on_click=delete,
+                ).props("color=negative")
+        confirmation.open()
 
     def _t(self, key: str) -> str:
         return translate(self._language, key)

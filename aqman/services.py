@@ -191,6 +191,18 @@ class ParameterService:
         logger.info("Created parameter id=%s", parameter.id)
         return parameter
 
+    def delete_parameter(self, parameter_id: int) -> None:
+        with self._session_factory.begin() as session:
+            parameter = repositories.get_parameter(session, parameter_id)
+            if parameter is None:
+                raise NotFoundError("Parameter not found.")
+            if repositories.parameter_has_references(session, parameter_id):
+                raise ValidationError(
+                    "Parameter is used by measurements or fertilizer effects."
+                )
+            repositories.delete_parameter(session, parameter)
+        logger.info("Deleted parameter id=%s", parameter_id)
+
 
 class FertilizerService:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:

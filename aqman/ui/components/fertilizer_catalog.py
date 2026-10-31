@@ -59,20 +59,18 @@ class FertilizerCatalog:
                             ).classes("text-body2")
                         with ui.row().classes("items-center"):
                             ui.button(
-                                self._t("edit_fertilizer"),
                                 icon="edit",
                                 on_click=lambda fertilizer_id=fertilizer.id: self.open_dialog(
                                     fertilizer_id
                                 ),
-                            ).props("flat")
+                            ).props("flat round").tooltip(self._t("edit_fertilizer"))
                             ui.button(
-                                self._t("delete_fertilizer"),
                                 icon="delete",
                                 on_click=lambda fertilizer_id=fertilizer.id, name=fertilizer.name: self.confirm_delete(
                                     fertilizer_id,
                                     name,
                                 ),
-                            ).props("flat")
+                            ).props("flat round").tooltip(self._t("delete_fertilizer"))
                     ui.separator()
                     with ui.column().classes("w-full gap-1"):
                         for effect in fertilizer.effects:

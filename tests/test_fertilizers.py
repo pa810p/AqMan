@@ -70,6 +70,17 @@ def test_fertilizer_crud_and_effects(fertilizer_services) -> None:
         fertilizers.get_fertilizer(fertilizer.id)
 
 
+def test_parameter_with_fertilizer_effect_cannot_be_deleted(fertilizer_services) -> None:
+    fertilizers, parameters, _ = fertilizer_services
+    no3 = parameters.create_parameter("NO3", "mg/L", None)
+    fertilizers.create_fertilizer("Nitro", 10, [(no3.id, 5)])
+
+    with pytest.raises(ValidationError, match="fertilizer effects"):
+        parameters.delete_parameter(no3.id)
+
+    assert [parameter.id for parameter in parameters.list_parameters()] == [no3.id]
+
+
 def test_fertilizer_names_are_unique_case_insensitively(fertilizer_services) -> None:
     fertilizers, parameters, _ = fertilizer_services
     no3 = parameters.create_parameter("NO3", "ppm", None)

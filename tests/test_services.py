@@ -84,6 +84,35 @@ def test_aquarium_rejects_invalid_thumbnail(services) -> None:
         aquariums.create_aquarium("Reef", 120, None, b"not an image")
 
 
+def test_unused_parameter_can_be_deleted(services) -> None:
+    _, parameters, _ = services
+    parameter = parameters.create_parameter("NO3", "mg/L", None)
+
+    parameters.delete_parameter(parameter.id)
+
+    assert parameters.list_parameters() == []
+    with pytest.raises(NotFoundError, match="Parameter not found"):
+        parameters.delete_parameter(parameter.id)
+
+
+def test_parameter_with_measurements_cannot_be_deleted(services) -> None:
+    aquariums, parameters, records = services
+    aquarium = aquariums.create_aquarium("Nano", 35, None)
+    parameter = parameters.create_parameter("NO3", "mg/L", None)
+    records.record_measurement(
+        aquarium.id,
+        datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc),
+        parameter.id,
+        5,
+        None,
+    )
+
+    with pytest.raises(ValidationError, match="used by measurements"):
+        parameters.delete_parameter(parameter.id)
+
+    assert [item.id for item in parameters.list_parameters()] == [parameter.id]
+
+
 def test_measurement_keeps_timezone_and_optional_parameters(services) -> None:
     aquariums, parameters, records = services
     aquarium = aquariums.create_aquarium("Nano", 35, None)

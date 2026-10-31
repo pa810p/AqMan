@@ -85,6 +85,23 @@ def add_parameter(
     return parameter
 
 
+def parameter_has_references(session: Session, parameter_id: int) -> bool:
+    measurement = select(Measurement.id).where(
+        Measurement.parameter_id == parameter_id
+    ).limit(1)
+    if session.scalar(measurement) is not None:
+        return True
+
+    fertilizer_effect = select(FertilizerEffect.id).where(
+        FertilizerEffect.parameter_id == parameter_id
+    ).limit(1)
+    return session.scalar(fertilizer_effect) is not None
+
+
+def delete_parameter(session: Session, parameter: Parameter) -> None:
+    session.delete(parameter)
+
+
 def list_fertilizer_names(session: Session) -> list[tuple[int, str]]:
     statement = select(Fertilizer.id, Fertilizer.name).order_by(Fertilizer.id)
     return [(fertilizer_id, name) for fertilizer_id, name in session.execute(statement)]
