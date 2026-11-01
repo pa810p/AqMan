@@ -18,6 +18,7 @@ def make_fertilizer(fertilizer_id=4, name="Nitrate", effects=None):
         id=fertilizer_id,
         name=name,
         dose_ml_per_100l=5,
+        default_target_increase_ppm=5.0,
         effects=effects
         if effects is not None
         else [
@@ -96,6 +97,9 @@ def test_refresh_renders_empty_and_populated_catalog(monkeypatch):
     catalog.refresh()
     assert changed[-1] == service.fertilizers
     assert fake_ui.by_label("Nitrate")
+    assert fake_ui.by_label(
+        catalog._t("fertilizer_default_target_summary", target=5.0)
+    )
     assert fake_ui.by_label(catalog._t("fertilizer_effect_line", parameter="NO3 (mg/L)", ppm=2.5))
 
 
@@ -158,9 +162,10 @@ def test_create_dialog_adds_removes_and_saves_effect_rows(monkeypatch):
     ppm_input.value = "3.25"
     fake_ui.by_label(catalog._t("fertilizer_name")).value = "Phosphate"
     fake_ui.by_label(catalog._t("fertilizer_dose")).value = "8"
+    fake_ui.by_label(catalog._t("fertilizer_default_target_increase")).value = "12.5"
     fake_ui.by_label(catalog._t("save")).on_click()
 
-    assert service.created == [("Phosphate", 8.0, [(2, 3.25)])]
+    assert service.created == [("Phosphate", 8.0, [(2, 3.25)], 12.5)]
     assert saved == [True]
     assert errors == []
     assert fake_ui.dialogs[0].closed
@@ -211,6 +216,25 @@ def test_create_dialog_shows_empty_parameter_state(monkeypatch):
     assert saved == []
 
 
+def test_create_dialog_requires_a_default_target(monkeypatch):
+    service = FertilizerService()
+    fake_ui, catalog, _, saved, errors = build_catalog(monkeypatch, service)
+    catalog.open_dialog()
+    fake_ui.by_label(catalog._t("fertilizer_name")).value = "Nitrate"
+    fake_ui.by_label(catalog._t("fertilizer_dose")).value = 5
+    fake_ui.by_label(catalog._t("fertilizer_effect_parameter")).value = 1
+    fake_ui.by_label(catalog._t("fertilizer_effect_ppm")).value = 2
+    fake_ui.by_label(catalog._t("fertilizer_default_target_increase")).value = None
+
+    fake_ui.by_label(catalog._t("save")).on_click()
+
+    assert len(errors) == 1
+    assert isinstance(errors[0], ValidationError)
+    assert "Default target increase must be a number" in str(errors[0])
+    assert service.created == []
+    assert saved == []
+
+
 def test_create_dialog_maps_service_error_to_callback(monkeypatch):
     service = FertilizerService()
     failure = ValidationError("already exists")
@@ -239,9 +263,10 @@ def test_edit_dialog_updates_existing_fertilizer(monkeypatch):
     assert fake_ui.by_label(catalog._t("fertilizer_name")).value == "Nitrate"
     fake_ui.by_label(catalog._t("fertilizer_name")).value = "Nitrate Plus"
     fake_ui.by_label(catalog._t("fertilizer_dose")).value = "6.5"
+    fake_ui.by_label(catalog._t("fertilizer_default_target_increase")).value = "7.5"
     fake_ui.by_label(catalog._t("save")).on_click()
 
-    assert service.updated == [(4, "Nitrate Plus", 6.5, [(1, 2.5)])]
+    assert service.updated == [(4, "Nitrate Plus", 6.5, [(1, 2.5)], 7.5)]
     assert saved == [True]
     assert errors == []
     assert fake_ui.dialogs[0].closed

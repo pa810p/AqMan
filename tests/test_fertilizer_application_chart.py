@@ -83,6 +83,8 @@ def test_fertilizer_application_chart_shows_separate_discrete_fertilizer_series(
 
     assert options["xAxis"]["type"] == "time"
     assert options["yAxis"]["name"] == "Dose (ml)"
+    assert options["yAxis"]["min"] == 0
+    assert options["yAxis"]["max"] == "dataMax"
     assert [series["name"] for series in options["series"]] == [
         "Nitro",
         "Potassium",

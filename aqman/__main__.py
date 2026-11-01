@@ -98,9 +98,9 @@ def main() -> None:
         host=args.host,
         port=port,
         title="Aquarium Manager",
-        window_size=(1280, 800),
+        window_size=(1280, 800) if args.mode == "native" else None,
         reload=False,
-        show=args.mode == "browser",
+        show=False,
     )
 
 

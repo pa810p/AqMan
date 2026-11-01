@@ -108,3 +108,41 @@ def test_measurement_session_data_migrates_to_direct_measurements(tmp_path: Path
     assert "fertilizer_applications" not in downgraded_tables
     assert len(downgraded_measurements) == 2
     assert len(set(downgraded_measurements)) == 2
+
+
+def test_fertilizer_default_target_migration_backfills_existing_fertilizers(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'fertilizer-default-target.sqlite3'}"
+    project_root = Path(__file__).resolve().parents[1]
+    config = _alembic_config(database_url, project_root)
+    command.upgrade(config, "0005_fertilizer_applications")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO fertilizers (name, dose_ml_per_100l)
+                VALUES ('Existing fertilizer', 10)
+                """
+            )
+        )
+    engine.dispose()
+
+    upgrade_database(database_url, project_root)
+
+    engine = create_engine(database_url)
+    with engine.connect() as connection:
+        target = connection.execute(
+            text(
+                """
+                SELECT default_target_increase_ppm
+                FROM fertilizers
+                WHERE name = 'Existing fertilizer'
+                """
+            )
+        ).scalar_one()
+    engine.dispose()
+
+    assert target == 5.0

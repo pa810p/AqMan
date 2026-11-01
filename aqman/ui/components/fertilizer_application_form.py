@@ -138,6 +138,9 @@ class FertilizerApplicationForm:
 
     def _refresh_parameters(self) -> None:
         fertilizer = self._selected_fertilizer()
+        if fertilizer is not None:
+            self._target_increase.value = fertilizer.default_target_increase_ppm
+            self._target_increase.update()
         effect_options = (
             {
                 effect.parameter_id: (

@@ -232,9 +232,14 @@ class FertilizerService:
         name: str,
         dose_ml_per_100l: float,
         effects: Sequence[tuple[int, float]],
+        default_target_increase_ppm: float = 5.0,
     ) -> Fertilizer:
         clean_name = _required_text(name, "Fertilizer name", 120)
         dose = _positive_number(dose_ml_per_100l, "Base dose")
+        default_target = _positive_number(
+            default_target_increase_ppm,
+            "Default target increase",
+        )
         with self._session_factory.begin() as session:
             self._validate_unique_name(session, clean_name)
             clean_effects = self._validate_effects(session, effects)
@@ -242,6 +247,7 @@ class FertilizerService:
                 session,
                 name=clean_name,
                 dose_ml_per_100l=dose,
+                default_target_increase_ppm=default_target,
                 effects=clean_effects,
             )
             loaded_fertilizer = repositories.get_fertilizer(session, fertilizer.id)
@@ -256,6 +262,7 @@ class FertilizerService:
         name: str,
         dose_ml_per_100l: float,
         effects: Sequence[tuple[int, float]],
+        default_target_increase_ppm: float | None = None,
     ) -> Fertilizer:
         clean_name = _required_text(name, "Fertilizer name", 120)
         dose = _positive_number(dose_ml_per_100l, "Base dose")
@@ -263,6 +270,14 @@ class FertilizerService:
             fertilizer = repositories.get_fertilizer(session, fertilizer_id)
             if fertilizer is None:
                 raise NotFoundError("Fertilizer not found.")
+            default_target = (
+                fertilizer.default_target_increase_ppm
+                if default_target_increase_ppm is None
+                else _positive_number(
+                    default_target_increase_ppm,
+                    "Default target increase",
+                )
+            )
             self._validate_unique_name(session, clean_name, exclude_id=fertilizer_id)
             clean_effects = self._validate_effects(session, effects)
             fertilizer = repositories.update_fertilizer(
@@ -270,6 +285,7 @@ class FertilizerService:
                 fertilizer,
                 name=clean_name,
                 dose_ml_per_100l=dose,
+                default_target_increase_ppm=default_target,
                 effects=clean_effects,
             )
             loaded_fertilizer = repositories.get_fertilizer(session, fertilizer.id)

@@ -226,11 +226,13 @@ def add_fertilizer(
     *,
     name: str,
     dose_ml_per_100l: float,
+    default_target_increase_ppm: float,
     effects: list[tuple[int, float]],
 ) -> Fertilizer:
     fertilizer = Fertilizer(
         name=name,
         dose_ml_per_100l=dose_ml_per_100l,
+        default_target_increase_ppm=default_target_increase_ppm,
         effects=[
             FertilizerEffect(parameter_id=parameter_id, ppm_per_dose=ppm_per_dose)
             for parameter_id, ppm_per_dose in effects
@@ -247,10 +249,12 @@ def update_fertilizer(
     *,
     name: str,
     dose_ml_per_100l: float,
+    default_target_increase_ppm: float,
     effects: list[tuple[int, float]],
 ) -> Fertilizer:
     fertilizer.name = name
     fertilizer.dose_ml_per_100l = dose_ml_per_100l
+    fertilizer.default_target_increase_ppm = default_target_increase_ppm
 
     effects_by_parameter = {effect.parameter_id: effect for effect in fertilizer.effects}
     requested_parameter_ids = {parameter_id for parameter_id, _ in effects}

@@ -108,6 +108,12 @@ class Fertilizer(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     dose_ml_per_100l: Mapped[float] = mapped_column(Float, nullable=False)
+    default_target_increase_ppm: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=5.0,
+        server_default=text("5.0"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),
         default=utc_now,

@@ -57,6 +57,12 @@ class FertilizerCatalog:
                                     dose=fertilizer.dose_ml_per_100l,
                                 )
                             ).classes("text-body2")
+                            ui.label(
+                                self._t(
+                                    "fertilizer_default_target_summary",
+                                    target=fertilizer.default_target_increase_ppm,
+                                )
+                            ).classes("text-body2")
                         with ui.row().classes("items-center"):
                             ui.button(
                                 icon="edit",
@@ -115,6 +121,15 @@ class FertilizerCatalog:
                 self._t("fertilizer_dose"),
                 value=fertilizer.dose_ml_per_100l if fertilizer else None,
                 min=0,
+            ).classes("w-full")
+            default_target_input = ui.number(
+                self._t("fertilizer_default_target_increase"),
+                value=(
+                    fertilizer.default_target_increase_ppm
+                    if fertilizer
+                    else 5.0
+                ),
+                min=0.1,
             ).classes("w-full")
             ui.label(self._t("fertilizer_effects")).classes("text-subtitle1")
             if not parameters:
@@ -234,6 +249,11 @@ class FertilizerCatalog:
                     if dose_input.value is None:
                         raise ValidationError("Base dose must be a number.")
                     dose = float(dose_input.value)
+                    if default_target_input.value is None:
+                        raise ValidationError(
+                            "Default target increase must be a number."
+                        )
+                    default_target = float(default_target_input.value)
                     effects: list[tuple[int, float]] = []
                     for _, parameter_input, ppm_input, _ in effect_rows:
                         parameter_id = parameter_id_for(parameter_input.value)
@@ -250,12 +270,14 @@ class FertilizerCatalog:
                             name_input.value or "",
                             dose,
                             effects,
+                            default_target,
                         )
                     else:
                         self._fertilizer_service.create_fertilizer(
                             name_input.value or "",
                             dose,
                             effects,
+                            default_target,
                         )
                 except (
                     NotFoundError,

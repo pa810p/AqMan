@@ -6,6 +6,8 @@ the application header.
 
 Aquarium cards can include an optional JPEG, PNG, or WebP photo (up to 8 MB). Photos are
 cropped to compact thumbnails and stored in the local SQLite database with the aquarium.
+Each fertilizer can have a default target increase in ppm, which is preselected when
+recording an application.
 
 ## Requirements
 
@@ -29,11 +31,14 @@ instead of deleting the existing environment.
 
 ## Run
 
-Run in the default browser:
+Run the web server without automatically opening a browser:
 
 ```bash
 python -m aqman --mode browser
 ```
+
+Open `http://127.0.0.1:8080` (or the configured port) in a browser to use the
+application.
 
 Run in a standalone desktop window:
 

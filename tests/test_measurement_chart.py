@@ -142,6 +142,8 @@ def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
     assert options["xAxis"]["type"] == "time"
     assert options["xAxis"]["axisLabel"]["formatter"] == "{yyyy}-{MM}-{dd}"
     assert options["yAxis"]["name"] == "NO3 (mg/L)"
+    assert options["yAxis"]["min"] == 0
+    assert options["yAxis"]["max"] == "dataMax"
     assert options["tooltip"]["trigger"] == "item"
     assert options["series"][0]["type"] == "scatter"
     assert options["series"][0]["symbol"] == "circle"

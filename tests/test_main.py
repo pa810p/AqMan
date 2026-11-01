@@ -99,14 +99,17 @@ def test_native_dependency_validation_succeeds_when_dependencies_are_present(
 
 
 @pytest.mark.parametrize(
-    ("mode", "expected_native", "expected_show"),
-    [("browser", False, True), ("native", True, False)],
+    ("mode", "expected_native", "expected_window_size"),
+    [
+        ("browser", False, None),
+        ("native", True, (1280, 800)),
+    ],
 )
 def test_main_wires_services_page_language_and_server_options(
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
     expected_native: bool,
-    expected_show: bool,
+    expected_window_size: tuple[int, int] | None,
 ) -> None:
     log_directory = Path("controlled-data") / "logs"
     settings = SimpleNamespace(
@@ -201,7 +204,7 @@ def test_main_wires_services_page_language_and_server_options(
         host="127.0.0.2",
         port=8001,
         title="Aquarium Manager",
-        window_size=(1280, 800),
+        window_size=expected_window_size,
         reload=False,
-        show=expected_show,
+        show=False,
     )

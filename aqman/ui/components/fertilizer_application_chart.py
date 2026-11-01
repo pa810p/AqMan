@@ -64,7 +64,8 @@ def _fertilizer_application_chart_options(
         "yAxis": {
             "type": "value",
             "name": dose_axis_label,
-            "scale": True,
+            "min": 0,
+            "max": "dataMax",
             "axisLine": {"lineStyle": {"color": "#9db59f"}},
             "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.2)"}},
         },

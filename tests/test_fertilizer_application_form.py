@@ -68,6 +68,7 @@ def test_form_selects_fertilizers_and_exposes_valid_values(monkeypatch) -> None:
         id=7,
         name="Nitrate",
         dose_ml_per_100l=10,
+        default_target_increase_ppm=7.5,
         effects=[effect],
     )
     aquarium = SimpleNamespace(id=3, volume_liters=100)
@@ -80,6 +81,7 @@ def test_form_selects_fertilizers_and_exposes_valid_values(monkeypatch) -> None:
     assert form._fertilizer.value == 7
     assert form._target_parameter.options == {1: "NO3 (mg/L)"}
     assert form._target_parameter.value == 1
+    assert form._target_increase.value == 7.5
     assert form._actual_dose.value is not None
     form._notes.value = "After water change"
     values = form.values
@@ -101,6 +103,43 @@ def test_form_selects_fertilizers_and_exposes_valid_values(monkeypatch) -> None:
     assert form._actual_dose.value is None
     assert form._target_effect_preview.text == "—"
     assert form._other_effects.text == form._t("fertilizer_effects_unavailable")
+
+
+def test_selecting_fertilizer_loads_its_default_target(monkeypatch) -> None:
+    install_ui(monkeypatch, form_module)
+    install_datetime_picker(monkeypatch, form_module)
+    parameter = SimpleNamespace(id=1, name="NO3", unit="mg/L")
+    effect = SimpleNamespace(parameter_id=1, ppm_per_dose=10, parameter=parameter)
+    fertilizers = [
+        SimpleNamespace(
+            id=1,
+            name="First",
+            dose_ml_per_100l=10,
+            default_target_increase_ppm=4.5,
+            effects=[effect],
+        ),
+        SimpleNamespace(
+            id=2,
+            name="Second",
+            dose_ml_per_100l=10,
+            default_target_increase_ppm=12,
+            effects=[effect],
+        ),
+    ]
+    form = FertilizerApplicationForm(
+        SimpleNamespace(list_aquariums=lambda: []),
+        lambda: 1,
+        "en",
+        lambda _: None,
+    )
+
+    form.set_fertilizers(fertilizers)
+    assert form._target_increase.value == 4.5
+
+    form._fertilizer.value = 2
+    form._refresh_parameters()
+
+    assert form._target_increase.value == 12
 
 
 @pytest.mark.parametrize(

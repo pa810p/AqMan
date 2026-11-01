@@ -39,6 +39,7 @@ def test_fertilizer_crud_and_effects(fertilizer_services) -> None:
 
     assert fertilizer.name == "EasyLife Nitro"
     assert fertilizer.dose_ml_per_100l == 10
+    assert fertilizer.default_target_increase_ppm == 5
     assert [
         (effect.parameter.name, effect.ppm_per_dose)
         for effect in fertilizer.effects
@@ -53,13 +54,23 @@ def test_fertilizer_crud_and_effects(fertilizer_services) -> None:
         "EasyLife Nitro Plus",
         12,
         [(potassium.id, 2.5)],
+        8.5,
     )
 
     assert updated.name == "EasyLife Nitro Plus"
     assert updated.dose_ml_per_100l == 12
+    assert updated.default_target_increase_ppm == 8.5
     assert [(effect.parameter.name, effect.ppm_per_dose) for effect in updated.effects] == [
         ("K", 2.5)
     ]
+
+    preserved = fertilizers.update_fertilizer(
+        updated.id,
+        updated.name,
+        updated.dose_ml_per_100l,
+        [(potassium.id, 2.5)],
+    )
+    assert preserved.default_target_increase_ppm == 8.5
 
     fertilizers.delete_fertilizer(fertilizer.id)
 
@@ -124,3 +135,39 @@ def test_fertilizer_rejects_non_positive_or_non_finite_values(
 
     with pytest.raises(ValidationError):
         fertilizers.create_fertilizer("Invalid", dose, [(no3.id, effect)])
+
+
+@pytest.mark.parametrize("target", [0, -1, float("nan"), float("inf")])
+def test_fertilizer_rejects_invalid_default_target(
+    fertilizer_services,
+    target: float,
+) -> None:
+    fertilizers, parameters, _ = fertilizer_services
+    no3 = parameters.create_parameter("NO3", "ppm", None)
+
+    with pytest.raises(ValidationError, match="Default target increase"):
+        fertilizers.create_fertilizer(
+            "Invalid target",
+            10,
+            [(no3.id, 5)],
+            target,
+        )
+
+
+def test_fertilizer_update_rejects_invalid_default_target(fertilizer_services) -> None:
+    fertilizers, parameters, _ = fertilizer_services
+    no3 = parameters.create_parameter("NO3", "ppm", None)
+    fertilizer = fertilizers.create_fertilizer(
+        "Nitrate",
+        10,
+        [(no3.id, 5)],
+    )
+
+    with pytest.raises(ValidationError, match="Default target increase"):
+        fertilizers.update_fertilizer(
+            fertilizer.id,
+            fertilizer.name,
+            fertilizer.dose_ml_per_100l,
+            [(no3.id, 5)],
+            0,
+        )

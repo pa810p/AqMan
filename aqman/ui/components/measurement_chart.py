@@ -27,7 +27,8 @@ def _measurement_chart_options(
         "yAxis": {
             "type": "value",
             "name": f"{parameter.name} ({parameter.unit})",
-            "scale": True,
+            "min": 0,
+            "max": "dataMax",
             "axisLine": {"lineStyle": {"color": "#9db59f"}},
             "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.2)"}},
         },
