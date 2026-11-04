@@ -10,6 +10,8 @@ port = 8080
 
 [ui]
 show_time_in_datetime_picker = false
+activity_history_page_size = 10
+activity_history_range_days = 365
 """
 
 
@@ -18,6 +20,8 @@ class Settings:
     data_directory: Path
     config_file: Path
     show_time_in_datetime_picker: bool
+    activity_history_page_size: int
+    activity_history_range_days: int
     port: int
 
     @property
@@ -51,16 +55,23 @@ def get_settings() -> Settings:
         xdg_config_home = Path(configured_xdg_home).expanduser()
         config_file = xdg_config_home / "aquarium-manager" / "config.toml"
 
-    show_time_in_datetime_picker, port = _load_configuration(config_file)
+    (
+        show_time_in_datetime_picker,
+        activity_history_page_size,
+        activity_history_range_days,
+        port,
+    ) = _load_configuration(config_file)
     return Settings(
         data_directory=data_directory,
         config_file=config_file,
         show_time_in_datetime_picker=show_time_in_datetime_picker,
+        activity_history_page_size=activity_history_page_size,
+        activity_history_range_days=activity_history_range_days,
         port=port,
     )
 
 
-def _load_configuration(config_file: Path) -> tuple[bool, int]:
+def _load_configuration(config_file: Path) -> tuple[bool, int, int, int]:
     try:
         config_file.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
@@ -96,6 +107,24 @@ def _load_configuration(config_file: Path) -> tuple[bool, int]:
         raise ValueError(
             f"ui.show_time_in_datetime_picker in {config_file} must be true or false."
         )
+    activity_history_page_size = ui_settings.get("activity_history_page_size", 10)
+    if (
+        isinstance(activity_history_page_size, bool)
+        or not isinstance(activity_history_page_size, int)
+        or activity_history_page_size < 1
+    ):
+        raise ValueError(
+            f"ui.activity_history_page_size in {config_file} must be a positive integer."
+        )
+    activity_history_range_days = ui_settings.get("activity_history_range_days", 365)
+    if (
+        isinstance(activity_history_range_days, bool)
+        or not isinstance(activity_history_range_days, int)
+        or activity_history_range_days < 1
+    ):
+        raise ValueError(
+            f"ui.activity_history_range_days in {config_file} must be a positive integer."
+        )
 
     port = _validate_port(
         server_settings.get("port", 8080),
@@ -108,7 +137,12 @@ def _load_configuration(config_file: Path) -> tuple[bool, int]:
         except ValueError as error:
             raise ValueError("AQMAN_PORT must be an integer between 1 and 65535.") from error
         port = _validate_port(port, "AQMAN_PORT")
-    return show_time, port
+    return (
+        show_time,
+        activity_history_page_size,
+        activity_history_range_days,
+        port,
+    )
 
 
 def _validate_port(value: object, source: str) -> int:

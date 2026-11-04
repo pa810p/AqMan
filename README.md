@@ -4,6 +4,11 @@ Local application for keeping aquarium measurements, notes, and water-change his
 The interface defaults to English and can be switched to Polish with the flag buttons in
 the application header.
 
+Notes in the activity history can be edited or deleted; deletion requires confirmation.
+Notes entered with measurements or fertilizer applications are prefixed with the
+parameter or fertilizer name (for example, `pH: ...` or `Nitrate: ...`) to make their
+context clear.
+
 Aquarium cards can include an optional JPEG, PNG, or WebP photo (up to 8 MB). Photos are
 cropped to compact thumbnails and stored in the local SQLite database with the aquarium.
 Each fertilizer can have a default target increase in ppm, which is preselected when
@@ -57,9 +62,13 @@ On first start, the application creates `$XDG_CONFIG_HOME/aquarium-manager/confi
 different configuration file. Restart the application after changing it. The
 `show_time_in_datetime_picker` setting in the `[ui]` section controls whether date/time
 pickers display a time; it defaults to `false`. With time hidden, saved records use local
-midnight, while the end date in chart ranges includes the full local day. The `[server]`
-section configures the listening port; `--port` takes precedence over `AQMAN_PORT`, which
-takes precedence over the configured value.
+midnight, while the end date in chart ranges includes the full local day.
+`activity_history_page_size` in the same section sets the number of daily activity rows
+per page and defaults to `10`. `activity_history_range_days` sets the rolling date range
+shown in the activity table and defaults to `365` days (from now minus that interval).
+The `[server]` section configures the listening port;
+`--port` takes precedence over `AQMAN_PORT`, which takes precedence over the configured
+value.
 
 ```toml
 [server]
@@ -67,6 +76,8 @@ port = 8080
 
 [ui]
 show_time_in_datetime_picker = false
+activity_history_page_size = 10
+activity_history_range_days = 365
 ```
 
 ## Tests

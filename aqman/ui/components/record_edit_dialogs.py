@@ -79,9 +79,43 @@ class RecordEditDialogs:
                 ui.notify(self._t("updated_note"), type="positive")
                 self._on_saved()
 
-            with ui.row().classes("justify-end"):
-                ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
-                ui.button(self._t("save"), on_click=save, icon="save")
+            def confirm_delete() -> None:
+                with ui.dialog() as confirmation, ui.card().classes("w-full max-w-md"):
+                    ui.label(self._t("confirm_delete_note"))
+
+                    def delete() -> None:
+                        try:
+                            self._record_service.delete_note(aquarium_id, note.id)
+                        except (ValidationError, NotFoundError) as error:
+                            self._on_error(error)
+                            confirmation.close()
+                            return
+                        confirmation.close()
+                        dialog.close()
+                        ui.notify(self._t("deleted_note"), type="positive")
+                        self._on_saved()
+
+                    with ui.row().classes("justify-end"):
+                        ui.button(
+                            self._t("cancel"),
+                            on_click=confirmation.close,
+                        ).props("flat")
+                        ui.button(
+                            self._t("delete_note"),
+                            icon="delete",
+                            on_click=delete,
+                        ).props("color=negative")
+                confirmation.open()
+
+            with ui.row().classes("w-full justify-between"):
+                ui.button(
+                    self._t("delete_note"),
+                    icon="delete",
+                    on_click=confirm_delete,
+                ).props("color=negative flat")
+                with ui.row().classes("justify-end"):
+                    ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
+                    ui.button(self._t("save"), on_click=save, icon="save")
         dialog.open()
 
     def open_measurement(self, measurement_id: int) -> None:

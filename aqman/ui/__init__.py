@@ -145,6 +145,8 @@ def build_ui(
     record_service: RecordService,
     language: str = "en",
     show_time_in_datetime_picker: bool = True,
+    activity_history_page_size: int = 10,
+    activity_history_range_days: int = 365,
 ) -> None:
     if language not in LANGUAGE_NAMES:
         language = "en"
@@ -253,6 +255,8 @@ def build_ui(
                         },
                         lambda: record_edit_dialogs,
                         _notify_error,
+                        page_size=activity_history_page_size,
+                        range_days=activity_history_range_days,
                     )
 
                     aquarium_charts = AquariumCharts(
@@ -470,12 +474,13 @@ def build_ui(
         try:
             values = form.values
             aquarium_id = current_aquarium_id()
+            note = values.note.strip() if values.note is not None else ""
             record_service.record_measurement(
                 aquarium_id,
                 values.timestamp,
                 values.parameter_id,
                 values.value,
-                values.note,
+                f"{values.parameter_name}: {note}" if note else None,
             )
         except (ValidationError, NotFoundError) as error:
             _notify_error(error)
@@ -520,12 +525,13 @@ def build_ui(
     def save_fertilizer_application(form: FertilizerApplicationForm) -> None:
         try:
             values = form.values
+            notes = values.notes.strip() if values.notes is not None else ""
             record_service.add_fertilizer_application(
                 current_aquarium_id(),
                 values.timestamp,
                 values.fertilizer_id,
                 values.actual_dose_ml,
-                values.notes,
+                f"{values.fertilizer_name}: {notes}" if notes else None,
             )
         except (ValidationError, NotFoundError) as error:
             _notify_error(error)

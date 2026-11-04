@@ -16,6 +16,7 @@ from aqman.ui.components.date_time_picker import DateTimePicker
 class MeasurementValues:
     timestamp: datetime
     parameter_id: int
+    parameter_name: str
     value: float
     note: str | None
 
@@ -29,6 +30,7 @@ class MeasurementForm:
     ) -> None:
         self._language = language
         self._on_save = on_save
+        self._parameter_names: dict[int, str] = {}
 
         with ui.card().classes("w-full"):
             ui.label(self._t("add_measurement")).classes("text-h6")
@@ -58,14 +60,21 @@ class MeasurementForm:
             value = float(self._value.value)
         except (TypeError, ValueError) as error:
             raise ValidationError("Measurement value must be a number.") from error
+        parameter_name = self._parameter_names.get(parameter_id)
+        if parameter_name is None:
+            raise ValidationError("Select a parameter first.")
         return MeasurementValues(
             timestamp=self._datetime.value,
             parameter_id=parameter_id,
+            parameter_name=parameter_name,
             value=value,
             note=self._note.value,
         )
 
     def set_parameters(self, parameters: list[Parameter]) -> None:
+        self._parameter_names = {
+            parameter.id: parameter.name for parameter in parameters
+        }
         options = {
             parameter.id: f"{parameter.name} ({parameter.unit})"
             for parameter in parameters

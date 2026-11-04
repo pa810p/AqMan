@@ -345,6 +345,30 @@ def test_note_edit_is_scoped_to_its_aquarium(services) -> None:
     assert unchanged_note.content == "Original content"
 
 
+def test_note_can_be_deleted_and_deletion_is_scoped_to_aquarium(services) -> None:
+    aquariums, _, records = services
+    aquarium = aquariums.create_aquarium("Community", 180, None)
+    other_aquarium = aquariums.create_aquarium("Other", 40, None)
+    records.add_note(
+        aquarium.id,
+        datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc),
+        None,
+        "Original content",
+    )
+    [note] = records.notes(aquarium.id)
+
+    with pytest.raises(NotFoundError, match="Note not found"):
+        records.delete_note(other_aquarium.id, note.id)
+    assert len(records.notes(aquarium.id)) == 1
+
+    records.delete_note(aquarium.id, note.id)
+
+    assert records.notes(aquarium.id) == []
+    assert records.daily_history(aquarium.id) == []
+    with pytest.raises(NotFoundError, match="Note not found"):
+        records.delete_note(aquarium.id, note.id)
+
+
 def test_water_change_can_be_edited_and_moved_to_another_day(services) -> None:
     aquariums, _, records = services
     aquarium = aquariums.create_aquarium("Community", 180, None)

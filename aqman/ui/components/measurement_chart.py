@@ -7,11 +7,14 @@ from nicegui import ui
 from aqman.models import Measurement, Parameter
 from aqman.services import RecordService, ValidationError
 from aqman.translations import translate
+from aqman.ui.components.chart_axis import x_axis_date_format
 
 
 def _measurement_chart_options(
     parameter: Parameter,
     measurements: list[Measurement],
+    start: datetime,
+    end: datetime,
 ) -> dict[str, Any]:
     return {
         "animation": False,
@@ -20,7 +23,12 @@ def _measurement_chart_options(
         "tooltip": {"trigger": "item"},
         "xAxis": {
             "type": "time",
-            "axisLabel": {"formatter": "{yyyy}-{MM}-{dd}"},
+            "min": int(start.timestamp() * 1000),
+            "max": int(end.timestamp() * 1000),
+            "axisLabel": {
+                "formatter": x_axis_date_format(start, end),
+                "hideOverlap": True,
+            },
             "axisLine": {"lineStyle": {"color": "#9db59f"}},
             "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.12)"}},
         },
@@ -131,7 +139,9 @@ class MeasurementChart:
         parameter = next(
             item for item in parameters if item.id == parameter_id
         )
-        self._set_chart_options(_measurement_chart_options(parameter, measurements))
+        self._set_chart_options(
+            _measurement_chart_options(parameter, measurements, start, end)
+        )
         self._chart.set_visibility(True)
         self._status.set_text(self._t("chart_no_data") if not measurements else "")
         self._status.set_visibility(not measurements)

@@ -90,6 +90,8 @@ def main() -> None:
             record_service,
             language=language,
             show_time_in_datetime_picker=settings.show_time_in_datetime_picker,
+            activity_history_page_size=settings.activity_history_page_size,
+            activity_history_range_days=settings.activity_history_range_days,
         )
 
     logger.info("Starting NiceGUI server.")

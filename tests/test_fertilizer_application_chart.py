@@ -79,9 +79,20 @@ def test_fertilizer_application_chart_shows_separate_discrete_fertilizer_series(
         ),
     ]
 
-    options = _fertilizer_application_chart_options(applications, "Dose (ml)")
+    start = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    options = _fertilizer_application_chart_options(
+        applications,
+        "Dose (ml)",
+        start,
+        end,
+    )
 
     assert options["xAxis"]["type"] == "time"
+    assert options["xAxis"]["min"] == int(start.timestamp() * 1000)
+    assert options["xAxis"]["max"] == int(end.timestamp() * 1000)
+    assert options["xAxis"]["axisLabel"]["formatter"] == "{MM}-{dd}"
+    assert options["xAxis"]["axisLabel"]["hideOverlap"] is True
     assert options["yAxis"]["name"] == "Dose (ml)"
     assert options["yAxis"]["min"] == 0
     assert options["yAxis"]["max"] == "dataMax"
@@ -120,6 +131,8 @@ def test_chart_refresh_and_clear_manage_empty_and_populated_states(monkeypatch) 
 
     service.fertilizer_applications_in_range.assert_called_once_with(4, start, end)
     assert fake_ui.chart.visible is True
+    assert fake_ui.chart.options["xAxis"]["min"] == int(start.timestamp() * 1000)
+    assert fake_ui.chart.options["xAxis"]["max"] == int(end.timestamp() * 1000)
     assert fake_ui.chart.options["series"] == []
     assert chart._status.text == (
         "No fertilizer applications match this date range."

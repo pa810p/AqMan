@@ -278,6 +278,8 @@ def ui_assembly(monkeypatch: pytest.MonkeyPatch):
         record_service,
         language="unsupported",
         show_time_in_datetime_picker=False,
+        activity_history_page_size=25,
+        activity_history_range_days=180,
     )
     return (
         fake_ui,
@@ -316,6 +318,8 @@ def test_build_ui_assembles_components_and_initial_dashboard(ui_assembly) -> Non
     assert instances["MeasurementForm"][0].kwargs["show_time"] is False
     assert instances["FertilizerApplicationForm"][0].kwargs["show_time"] is False
     assert instances["AquariumCharts"][0].kwargs["show_time"] is False
+    assert instances["ActivityHistory"][0].kwargs["page_size"] == 25
+    assert instances["ActivityHistory"][0].kwargs["range_days"] == 180
     assert instances["ActivityHistory"][0].refresh_calls == 1
     assert instances["AquariumCharts"][0].refresh_calls == 1
 
@@ -349,6 +353,7 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
     measurement.values = SimpleNamespace(
         timestamp=timestamp,
         parameter_id=3,
+        parameter_name="pH",
         value=8.2,
         note="morning",
     )
@@ -358,7 +363,7 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
         timestamp,
         3,
         8.2,
-        "morning",
+        "pH: morning",
     )
     assert measurement.reset_calls == 1
 
@@ -396,8 +401,9 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
     fertilizer_application.values = SimpleNamespace(
         timestamp=timestamp,
         fertilizer_id=5,
+        fertilizer_name="Nitrate",
         actual_dose_ml=2.5,
-        notes="",
+        notes="After feeding",
     )
     fertilizer_application.kwargs["on_save"](fertilizer_application)
     record_service.add_fertilizer_application.assert_called_once_with(
@@ -405,7 +411,7 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
         timestamp,
         5,
         2.5,
-        "",
+        "Nitrate: After feeding",
     )
 
     assert len(fake_ui.notifications) == 4

@@ -30,8 +30,9 @@ def test_measurement_form_values_parameter_selection_and_reset(monkeypatch):
     form._value.value = "4.25"
     form._note.value = "after feeding"
     values = form.values
-    assert (values.parameter_id, values.value, values.note) == (
+    assert (values.parameter_id, values.parameter_name, values.value, values.note) == (
         1,
+        "NO3",
         4.25,
         "after feeding",
     )
@@ -63,4 +64,15 @@ def test_measurement_form_rejects_missing_or_invalid_values(
     form._value.value = measurement_value
 
     with pytest.raises(ValidationError, match=message):
+        form.values
+
+
+def test_measurement_form_rejects_unavailable_parameter(monkeypatch):
+    install_ui(monkeypatch, measurement_form_module)
+    install_datetime_picker(monkeypatch, measurement_form_module)
+    form = MeasurementForm("en", lambda _: None)
+    form._parameter.value = 1
+    form._value.value = 5
+
+    with pytest.raises(ValidationError, match="Select a parameter first"):
         form.values

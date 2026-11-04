@@ -6,6 +6,7 @@ from nicegui import ui
 from aqman.models import FertilizerApplication
 from aqman.services import RecordService
 from aqman.translations import translate
+from aqman.ui.components.chart_axis import x_axis_date_format
 
 _SERIES_COLORS = (
     "#7acb84",
@@ -21,6 +22,8 @@ _SERIES_COLORS = (
 def _fertilizer_application_chart_options(
     applications: list[FertilizerApplication],
     dose_axis_label: str,
+    start: datetime,
+    end: datetime,
 ) -> dict[str, Any]:
     grouped: dict[int, tuple[str, list[dict[str, Any]]]] = {}
     for application in applications:
@@ -57,7 +60,12 @@ def _fertilizer_application_chart_options(
         "tooltip": {"trigger": "item"},
         "xAxis": {
             "type": "time",
-            "axisLabel": {"formatter": "{yyyy}-{MM}-{dd}"},
+            "min": int(start.timestamp() * 1000),
+            "max": int(end.timestamp() * 1000),
+            "axisLabel": {
+                "formatter": x_axis_date_format(start, end),
+                "hideOverlap": True,
+            },
             "axisLine": {"lineStyle": {"color": "#9db59f"}},
             "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.12)"}},
         },
@@ -118,6 +126,8 @@ class FertilizerApplicationChart:
             _fertilizer_application_chart_options(
                 applications,
                 self._t("chart_fertilizer_dose"),
+                start,
+                end,
             )
         )
         self._chart.set_visibility(True)

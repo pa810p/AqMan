@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timedelta
 
 from nicegui import ui
 
@@ -24,6 +25,8 @@ class ActivityHistory:
         water_source_labels: dict[WaterSource, str],
         edit_dialogs_provider: Callable[[], RecordEditDialogs],
         on_error: Callable[[Exception], None],
+        page_size: int = 10,
+        range_days: int = 365,
     ) -> None:
         self._record_service = record_service
         self._aquarium_id_provider = aquarium_id_provider
@@ -31,6 +34,8 @@ class ActivityHistory:
         self._water_source_labels = water_source_labels
         self._edit_dialogs_provider = edit_dialogs_provider
         self._on_error = on_error
+        self._page_size = page_size
+        self._range_days = range_days
 
         with ui.card().classes("w-full col-span-2"):
             ui.label(self._t("activity_history")).classes("text-h6")
@@ -50,6 +55,14 @@ class ActivityHistory:
                 ui.label(self._t("empty_history"))
                 return
 
+            range_start = (
+                datetime.now().astimezone() - timedelta(days=self._range_days)
+            ).date()
+            daily_history = [day for day in daily_history if day.day >= range_start]
+            if not daily_history:
+                ui.label(self._t("empty_history_range", days=self._range_days))
+                return
+
             columns, parameter_ids, fertilizer_ids = self._history_columns(
                 daily_history
             )
@@ -61,6 +74,7 @@ class ActivityHistory:
                 columns=columns,
                 rows=rows,
                 row_key="id",
+                pagination=self._page_size,
             ).classes("w-full")
             self._add_measurement_slots(history_table, parameter_ids)
             self._add_fertilizer_slots(history_table, fertilizer_ids)

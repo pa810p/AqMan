@@ -117,6 +117,8 @@ def test_main_wires_services_page_language_and_server_options(
         database_url="sqlite:///controlled.sqlite3",
         port=8001,
         show_time_in_datetime_picker=False,
+        activity_history_page_size=25,
+        activity_history_range_days=180,
     )
     monkeypatch.setattr(app.Path, "mkdir", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
@@ -198,6 +200,8 @@ def test_main_wires_services_page_language_and_server_options(
         services["record"],
         language="pl",
         show_time_in_datetime_picker=False,
+        activity_history_page_size=25,
+        activity_history_range_days=180,
     )
     run.assert_called_once_with(
         native=expected_native,

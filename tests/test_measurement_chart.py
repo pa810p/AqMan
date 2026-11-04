@@ -137,10 +137,15 @@ def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
         ),
     ]
 
-    options = _measurement_chart_options(parameter, measurements)
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 31, tzinfo=timezone.utc)
+    options = _measurement_chart_options(parameter, measurements, start, end)
 
     assert options["xAxis"]["type"] == "time"
+    assert options["xAxis"]["min"] == int(start.timestamp() * 1000)
+    assert options["xAxis"]["max"] == int(end.timestamp() * 1000)
     assert options["xAxis"]["axisLabel"]["formatter"] == "{yyyy}-{MM}-{dd}"
+    assert options["xAxis"]["axisLabel"]["hideOverlap"] is True
     assert options["yAxis"]["name"] == "NO3 (mg/L)"
     assert options["yAxis"]["min"] == 0
     assert options["yAxis"]["max"] == "dataMax"
@@ -415,6 +420,8 @@ def test_measurement_chart_refresh_selects_parameters_and_renders_data(
     assert chart._parameter.value == 7
     assert chart._chart.visible is True
     assert chart._status.visible is False
+    assert chart._chart.options["xAxis"]["min"] == int(start.timestamp() * 1000)
+    assert chart._chart.options["xAxis"]["max"] == int(end.timestamp() * 1000)
     chart._parameter._value_change(None)
     changed.assert_called_once_with()
 

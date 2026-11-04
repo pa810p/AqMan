@@ -85,8 +85,14 @@ def test_form_selects_fertilizers_and_exposes_valid_values(monkeypatch) -> None:
     assert form._actual_dose.value is not None
     form._notes.value = "After water change"
     values = form.values
-    assert (values.fertilizer_id, values.actual_dose_ml, values.notes) == (
+    assert (
+        values.fertilizer_id,
+        values.fertilizer_name,
+        values.actual_dose_ml,
+        values.notes,
+    ) == (
         7,
+        "Nitrate",
         form._actual_dose.value,
         "After water change",
     )
@@ -162,6 +168,19 @@ def test_values_reject_invalid_fertilizer_or_actual_dose(
     form._actual_dose.value = dose
 
     with pytest.raises(ValidationError, match=message):
+        form.values
+
+
+def test_values_reject_fertilizer_not_in_current_options(monkeypatch) -> None:
+    install_ui(monkeypatch, form_module)
+    install_datetime_picker(monkeypatch, form_module)
+    form = FertilizerApplicationForm(
+        SimpleNamespace(list_aquariums=lambda: []), lambda: 1, "en", lambda _: None
+    )
+    form._fertilizer.value = 1
+    form._actual_dose.value = 5
+
+    with pytest.raises(ValidationError, match="Select a fertilizer first"):
         form.values
 
 

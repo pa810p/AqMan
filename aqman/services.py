@@ -755,6 +755,16 @@ class RecordService:
         logger.info("Updated note id=%s aquarium_id=%s", note_id, aquarium_id)
         return note
 
+    def delete_note(self, aquarium_id: int, note_id: int) -> None:
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            note = repositories.get_note(session, aquarium_id, note_id)
+            if note is None:
+                raise NotFoundError("Note not found.")
+            repositories.delete_note(session, note)
+        logger.info("Deleted note id=%s aquarium_id=%s", note_id, aquarium_id)
+
     def notes(self, aquarium_id: int) -> list[Note]:
         with self._session_factory() as session:
             if repositories.get_aquarium(session, aquarium_id) is None:

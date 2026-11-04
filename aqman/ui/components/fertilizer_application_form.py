@@ -27,6 +27,7 @@ _SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"
 class FertilizerApplicationValues:
     timestamp: datetime
     fertilizer_id: int
+    fertilizer_name: str
     actual_dose_ml: float
     notes: str | None
 
@@ -107,9 +108,13 @@ class FertilizerApplicationForm:
         actual_dose_ml = self._actual_dose.value
         if actual_dose_ml is None:
             raise ValidationError("Actual fertilizer dose must be a number.")
+        fertilizer = self._fertilizers.get(fertilizer_id)
+        if fertilizer is None:
+            raise ValidationError("Select a fertilizer first.")
         return FertilizerApplicationValues(
             timestamp=self._datetime.value,
             fertilizer_id=fertilizer_id,
+            fertilizer_name=fertilizer.name,
             actual_dose_ml=actual_dose_ml,
             notes=self._notes.value,
         )

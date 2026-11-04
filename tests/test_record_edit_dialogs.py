@@ -74,6 +74,43 @@ def test_note_get_failure_is_reported_without_opening_dialog(monkeypatch):
     assert fake_ui.dialogs == []
 
 
+def test_note_dialog_deletes_after_confirmation_and_reports_errors(monkeypatch):
+    fake_ui, dialogs, records, _, _, saved, errors = build_dialogs(monkeypatch)
+    note = SimpleNamespace(id=4, timestamp=TIMESTAMP, category=None, content="Old")
+    records.get_note.return_value = note
+
+    dialogs.open_note(4)
+    note_dialog = fake_ui.dialogs[0]
+    open_delete_confirmation = fake_ui.by_label(dialogs._t("delete_note"))
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[1]
+    assert confirmation.opened
+
+    fake_ui.by_label(dialogs._t("cancel")).on_click()
+    assert confirmation.closed
+    assert not getattr(note_dialog, "closed", False)
+    assert records.delete_note.call_count == 0
+
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[2]
+    records.delete_note.side_effect = NotFoundError("already gone")
+    fake_ui.by_label(dialogs._t("delete_note")).on_click()
+    assert isinstance(errors[-1], NotFoundError)
+    assert confirmation.closed
+    assert not getattr(note_dialog, "closed", False)
+
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[3]
+    records.delete_note.side_effect = None
+    fake_ui.by_label(dialogs._t("delete_note")).on_click()
+
+    assert records.delete_note.call_count == 2
+    assert confirmation.closed
+    assert note_dialog.closed
+    assert saved == [True]
+    assert fake_ui.notifications[-1] == (dialogs._t("deleted_note"), "positive")
+
+
 def test_measurement_invalid_parameter_save_and_delete_paths(monkeypatch):
     fake_ui, dialogs, records, parameters, _, saved, errors = build_dialogs(monkeypatch)
     measurement = SimpleNamespace(

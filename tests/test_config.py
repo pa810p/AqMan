@@ -18,8 +18,12 @@ def test_get_settings_creates_default_toml_config(
 
     assert settings.config_file == config_file
     assert settings.show_time_in_datetime_picker is False
+    assert settings.activity_history_page_size == 10
+    assert settings.activity_history_range_days == 365
     assert settings.port == 8080
     assert 'show_time_in_datetime_picker = false' in config_file.read_text()
+    assert "activity_history_page_size = 10" in config_file.read_text()
+    assert "activity_history_range_days = 365" in config_file.read_text()
     assert "port = 8080" in config_file.read_text()
 
 
@@ -47,7 +51,10 @@ def test_get_settings_reads_show_time_from_toml(
 ) -> None:
     config_file = tmp_path / "config.toml"
     config_file.write_text(
-        "[server]\nport = 8896\n\n[ui]\nshow_time_in_datetime_picker = true\n",
+        "[server]\nport = 8896\n\n[ui]\n"
+        "show_time_in_datetime_picker = true\n"
+        "activity_history_page_size = 25\n"
+        "activity_history_range_days = 180\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("AQMAN_CONFIG_FILE", str(config_file))
@@ -57,6 +64,8 @@ def test_get_settings_reads_show_time_from_toml(
     settings = get_settings()
 
     assert settings.show_time_in_datetime_picker is True
+    assert settings.activity_history_page_size == 25
+    assert settings.activity_history_range_days == 180
     assert settings.port == 8896
 
 
@@ -89,6 +98,42 @@ def test_get_settings_rejects_non_boolean_show_time(
     monkeypatch.setenv("AQMAN_DATA_DIR", str(tmp_path / "data"))
 
     with pytest.raises(ValueError, match="show_time_in_datetime_picker"):
+        get_settings()
+
+
+@pytest.mark.parametrize("page_size_literal", ["0", "-1", '"10"', "true"])
+def test_get_settings_rejects_invalid_activity_history_page_size(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    page_size_literal: str,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        f"[ui]\nactivity_history_page_size = {page_size_literal}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AQMAN_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("AQMAN_DATA_DIR", str(tmp_path / "data"))
+
+    with pytest.raises(ValueError, match="ui.activity_history_page_size"):
+        get_settings()
+
+
+@pytest.mark.parametrize("range_days_literal", ["0", "-1", '"365"', "true"])
+def test_get_settings_rejects_invalid_activity_history_range_days(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    range_days_literal: str,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        f"[ui]\nactivity_history_range_days = {range_days_literal}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AQMAN_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("AQMAN_DATA_DIR", str(tmp_path / "data"))
+
+    with pytest.raises(ValueError, match="ui.activity_history_range_days"):
         get_settings()
 
 

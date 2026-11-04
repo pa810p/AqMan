@@ -391,6 +391,10 @@ def get_note(session: Session, aquarium_id: int, note_id: int) -> Note | None:
     return session.scalar(statement)
 
 
+def delete_note(session: Session, note: Note) -> None:
+    session.delete(note)
+
+
 def list_notes(session: Session, aquarium_id: int) -> list[Note]:
     statement = (
         select(Note)

@@ -65,6 +65,8 @@ def _make_history(
     *,
     aquarium_id_provider=lambda: 3,
     daily_history=None,
+    page_size=10,
+    range_days=365,
 ):
     service = Mock()
     service.daily_history.return_value = daily_history or []
@@ -77,6 +79,8 @@ def _make_history(
         {WaterSource.RO: "RO", WaterSource.TAP: "Tap", WaterSource.MIXED: "Mixed"},
         lambda: dialogs,
         errors.append,
+        page_size=page_size,
+        range_days=range_days,
     )
     return history, service, errors, dialogs
 
@@ -209,6 +213,7 @@ def test_refresh_renders_daily_rows_slots_and_edit_handlers(monkeypatch) -> None
     service.daily_history.assert_called_once_with(3)
     table = fake_ui.tables[0]
     assert table.row_key == "id"
+    assert table.pagination == 10
     assert table.rows[0]["parameter_5"] == [{"id": 11, "value": "7.25"}]
     assert table.rows[0]["water_changes"][0]["label"] == (
         "RO: 20 L (weekly service)"
@@ -228,6 +233,111 @@ def test_refresh_renders_daily_rows_slots_and_edit_handlers(monkeypatch) -> None
     assert "fertilizer-application-edit-click" in table.handlers
     assert "water-change-edit-click" in table.handlers
     assert "note-edit-click" in table.handlers
+
+
+def test_refresh_uses_configured_page_size_for_newest_daily_rows(monkeypatch) -> None:
+    fake_ui = FakeHistoryUI()
+    monkeypatch.setattr(activity_history_module, "ui", fake_ui)
+    history, _, _, _ = _make_history(
+        daily_history=[
+            DailyAquariumHistory(
+                day=date(2026, 10, 31),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            ),
+            DailyAquariumHistory(
+                day=date(2026, 10, 30),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            ),
+        ],
+        page_size=1,
+    )
+
+    history.refresh()
+
+    table = fake_ui.tables[0]
+    assert table.pagination == 1
+    assert [row["date"] for row in table.rows] == [
+        "2026-10-31",
+        "2026-10-30",
+    ]
+
+
+def test_refresh_limits_rows_to_configured_rolling_date_range(monkeypatch) -> None:
+    fake_ui = FakeHistoryUI()
+    monkeypatch.setattr(activity_history_module, "ui", fake_ui)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 1, 12, tzinfo=tz)
+
+    monkeypatch.setattr(activity_history_module, "datetime", FixedDateTime)
+    history, _, _, _ = _make_history(
+        daily_history=[
+            DailyAquariumHistory(
+                day=date(2026, 11, 1),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            ),
+            DailyAquariumHistory(
+                day=date(2025, 11, 1),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            ),
+            DailyAquariumHistory(
+                day=date(2025, 10, 31),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            ),
+        ],
+        range_days=365,
+    )
+
+    history.refresh()
+
+    table = fake_ui.tables[0]
+    assert [row["date"] for row in table.rows] == ["2026-11-01", "2025-11-01"]
+
+
+def test_refresh_shows_empty_state_when_no_activity_is_in_date_range(monkeypatch) -> None:
+    fake_ui = FakeHistoryUI()
+    monkeypatch.setattr(activity_history_module, "ui", fake_ui)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 1, 12, tzinfo=tz)
+
+    monkeypatch.setattr(activity_history_module, "datetime", FixedDateTime)
+    history, _, _, _ = _make_history(
+        daily_history=[
+            DailyAquariumHistory(
+                day=date(2025, 10, 31),
+                measurements={},
+                water_changes=(),
+                notes=(),
+                fertilizer_applications=(),
+            )
+        ],
+        range_days=365,
+    )
+
+    history.refresh()
+
+    assert fake_ui.tables == []
+    assert fake_ui.labels[-1].text == "No activity in the last 365 days."
 
 
 @pytest.mark.parametrize(
