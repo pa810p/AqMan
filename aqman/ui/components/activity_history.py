@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from nicegui import ui
 
-from aqman.models import FertilizerApplication, WaterChange, WaterSource
+from aqman.models import FertilizerApplication, Measurement, WaterChange, WaterSource
 from aqman.services import (
     DailyAquariumHistory,
     NotFoundError,
@@ -128,6 +128,18 @@ class ActivityHistory:
                 }
                 for parameter_id in parameter_ids
             ],
+            *(
+                [
+                    {
+                        "name": "co2",
+                        "label": self._t("history_co2"),
+                        "field": "co2",
+                        "align": "right",
+                    }
+                ]
+                if any(self._co2_for_day(day) is not None for day in daily_history)
+                else []
+            ),
             *[
                 {
                     "name": f"fertilizer_{fertilizer_id}",
@@ -188,6 +200,11 @@ class ActivityHistory:
         row: dict[str, object] = {
             "id": day.day.isoformat(),
             "date": day.day.isoformat(),
+            "co2": (
+                f"{co2_value:.1f}"
+                if (co2_value := self._co2_for_day(day)) is not None
+                else ""
+            ),
             "water_changes": [
                 {
                     "id": water_change.id,
@@ -215,6 +232,30 @@ class ActivityHistory:
                 if application.fertilizer_id == fertilizer_id
             ]
         return row
+
+    @staticmethod
+    def _co2_for_day(day: DailyAquariumHistory) -> float | None:
+        measurements_by_name: dict[str, list[Measurement]] = {}
+        for measurements in day.measurements.values():
+            for measurement in measurements:
+                parameter_name = measurement.parameter.name.strip().casefold()
+                if parameter_name in {"kh", "ph"}:
+                    measurements_by_name.setdefault(parameter_name, []).append(
+                        measurement
+                    )
+
+        if "kh" not in measurements_by_name or "ph" not in measurements_by_name:
+            return None
+
+        kh_measurement = max(
+            measurements_by_name["kh"],
+            key=lambda measurement: (measurement.timestamp, measurement.id),
+        )
+        ph_measurement = max(
+            measurements_by_name["ph"],
+            key=lambda measurement: (measurement.timestamp, measurement.id),
+        )
+        return 3 * kh_measurement.value * 10 ** (7 - ph_measurement.value)
 
     def _format_water_change(self, water_change: WaterChange) -> str:
         entry = self._t(

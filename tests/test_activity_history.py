@@ -161,6 +161,113 @@ def test_history_table_has_a_separate_column_for_each_fertilizer() -> None:
     assert "fertilizer_applications" not in row
 
 
+def test_history_calculates_co2_when_kh_and_ph_are_measured_on_the_same_day() -> None:
+    kh = Parameter(id=91, name="KH", unit="°dKH")
+    ph = Parameter(id=7, name="pH", unit="pH")
+    day = DailyAquariumHistory(
+        day=date(2026, 10, 30),
+        measurements={
+            kh.id: (
+                Measurement(
+                    id=1,
+                    aquarium_id=3,
+                    timestamp=datetime(2026, 10, 30, 11, tzinfo=timezone.utc),
+                    parameter_id=kh.id,
+                    value=4,
+                    parameter=kh,
+                ),
+            ),
+            ph.id: (
+                Measurement(
+                    id=2,
+                    aquarium_id=3,
+                    timestamp=datetime(2026, 10, 30, 10, tzinfo=timezone.utc),
+                    parameter_id=ph.id,
+                    value=7,
+                    parameter=ph,
+                ),
+                Measurement(
+                    id=3,
+                    aquarium_id=3,
+                    timestamp=datetime(2026, 10, 30, 12, tzinfo=timezone.utc),
+                    parameter_id=ph.id,
+                    value=7.2,
+                    parameter=ph,
+                ),
+            ),
+        },
+        water_changes=(),
+        notes=(),
+        fertilizer_applications=(),
+    )
+    history = ActivityHistory.__new__(ActivityHistory)
+    history._language = "en"
+
+    columns, parameter_ids, fertilizer_ids = history._history_columns([day])
+    row = history._history_row(day, parameter_ids, fertilizer_ids)
+
+    assert next(column for column in columns if column["name"] == "co2") == {
+        "name": "co2",
+        "label": "CO₂ (mg/L)",
+        "field": "co2",
+        "align": "right",
+    }
+    assert row["co2"] == "7.6"
+
+
+def test_history_does_not_show_co2_when_kh_and_ph_are_measured_on_different_days() -> None:
+    kh = Parameter(id=91, name="KH", unit="°dKH")
+    ph = Parameter(id=7, name="pH", unit="pH")
+    days = [
+        DailyAquariumHistory(
+            day=date(2026, 10, 30),
+            measurements={
+                kh.id: (
+                    Measurement(
+                        id=1,
+                        aquarium_id=3,
+                        timestamp=datetime(2026, 10, 30, tzinfo=timezone.utc),
+                        parameter_id=kh.id,
+                        value=4,
+                        parameter=kh,
+                    ),
+                )
+            },
+            water_changes=(),
+            notes=(),
+            fertilizer_applications=(),
+        ),
+        DailyAquariumHistory(
+            day=date(2026, 10, 31),
+            measurements={
+                ph.id: (
+                    Measurement(
+                        id=2,
+                        aquarium_id=3,
+                        timestamp=datetime(2026, 10, 31, tzinfo=timezone.utc),
+                        parameter_id=ph.id,
+                        value=7,
+                        parameter=ph,
+                    ),
+                )
+            },
+            water_changes=(),
+            notes=(),
+            fertilizer_applications=(),
+        ),
+    ]
+    history = ActivityHistory.__new__(ActivityHistory)
+    history._language = "en"
+
+    columns, parameter_ids, fertilizer_ids = history._history_columns(days)
+
+    assert "co2" not in {column["name"] for column in columns}
+    assert all(
+        history._history_row(day, parameter_ids, fertilizer_ids)["co2"] == ""
+        for day in days
+    )
+
+
 def test_refresh_renders_daily_rows_slots_and_edit_handlers(monkeypatch) -> None:
     fake_ui = FakeHistoryUI()
     monkeypatch.setattr(activity_history_module, "ui", fake_ui)

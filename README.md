@@ -8,6 +8,9 @@ Aquarium cards can include an optional JPEG, PNG, or WebP photo (up to 8 MB). Ph
 cropped to compact thumbnails and stored in the local SQLite database with the aquarium.
 Each fertilizer can have a default target increase in ppm, which is preselected when
 recording an application.
+The activity history shows a calculated CO₂ (mg/L) column on days when both parameters
+named `KH` and `pH` have been measured in the same aquarium. It uses the latest reading of
+each parameter that day and assumes KH is in °dKH: `CO₂ = 3 × KH × 10^(7 − pH)`.
 
 ## Requirements
 
