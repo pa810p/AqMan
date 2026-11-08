@@ -72,10 +72,12 @@ class AquariumCharts:
                 record_service,
                 language,
                 self.refresh_measurement_chart,
+                show_time=show_time,
             )
             self._fertilizer_chart = FertilizerApplicationChart(
                 record_service,
                 language,
+                show_time=show_time,
             )
 
         start, end = _default_chart_range()

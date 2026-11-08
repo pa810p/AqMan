@@ -124,7 +124,14 @@ def test_date_only_chart_end_includes_the_entire_local_day() -> None:
     assert local_end.strftime("%H:%M:%S.%f") == "23:59:59.999999"
 
 
-def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
+@pytest.mark.parametrize(
+    ("show_time", "expected_name"),
+    [(True, "%Y-%m-%d %H:%M"), (False, "%Y-%m-%d")],
+)
+def test_measurement_chart_options_show_measurement_date_and_parameter_units(
+    show_time,
+    expected_name,
+) -> None:
     parameter = Parameter(name="NO3", unit="mg/L")
     measurements = [
         Measurement(
@@ -139,7 +146,9 @@ def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
 
     start = datetime(2026, 9, 1, tzinfo=timezone.utc)
     end = datetime(2026, 10, 31, tzinfo=timezone.utc)
-    options = _measurement_chart_options(parameter, measurements, start, end)
+    options = _measurement_chart_options(
+        parameter, measurements, start, end, show_time=show_time
+    )
 
     assert options["xAxis"]["type"] == "time"
     assert options["xAxis"]["min"] == int(start.timestamp() * 1000)
@@ -154,7 +163,13 @@ def test_measurement_chart_options_show_iso_dates_and_parameter_units() -> None:
     assert options["series"][0]["symbol"] == "circle"
     assert "lineStyle" not in options["series"][0]
     assert options["series"][0]["data"] == [
-        [int(measurement.timestamp.timestamp() * 1000), measurement.value]
+        {
+            "name": measurement.timestamp.astimezone().strftime(expected_name),
+            "value": [
+                int(measurement.timestamp.timestamp() * 1000),
+                measurement.value,
+            ],
+        }
         for measurement in measurements
     ]
 
@@ -184,6 +199,7 @@ def test_aquarium_charts_builds_shared_pickers_and_initializes_range(
     fake_ui = FakeChartUI()
     monkeypatch.setattr(aquarium_charts_module, "ui", fake_ui)
     picker_instances = []
+    chart_instances = []
 
     class Picker:
         def __init__(self, label, on_change, show_time):
@@ -200,12 +216,12 @@ def test_aquarium_charts_builds_shared_pickers_and_initializes_range(
             self.set_values.append(value)
 
     class Measurement:
-        def __init__(self, *_args):
-            pass
+        def __init__(self, *_args, **kwargs):
+            chart_instances.append(("measurement", kwargs))
 
     class Fertilizer:
-        def __init__(self, *_args):
-            pass
+        def __init__(self, *_args, **kwargs):
+            chart_instances.append(("fertilizer", kwargs))
 
     monkeypatch.setattr(aquarium_charts_module, "DateTimePicker", Picker)
     monkeypatch.setattr(aquarium_charts_module, "MeasurementChart", Measurement)
@@ -227,6 +243,10 @@ def test_aquarium_charts_builds_shared_pickers_and_initializes_range(
 
     assert [picker.label for picker in picker_instances] == ["Start", "End"]
     assert all(picker.show_time is False for picker in picker_instances)
+    assert chart_instances == [
+        ("measurement", {"show_time": False}),
+        ("fertilizer", {"show_time": False}),
+    ]
     assert all(picker.on_change == charts.refresh for picker in picker_instances)
     assert picker_instances[0].value == datetime(2026, 2, 28, 10, 15)
     assert picker_instances[1].value == datetime(

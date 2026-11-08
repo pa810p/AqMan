@@ -1,8 +1,6 @@
 # Aquarium Manager
 
 Local application for keeping aquarium measurements, notes, and water-change history.
-The interface defaults to English and can be switched to Polish with the flag buttons in
-the application header.
 
 Aquarium cards can include an optional JPEG, PNG, or WebP photo (up to 8 MB). Photos are
 cropped to compact thumbnails and stored in the local SQLite database with the aquarium.

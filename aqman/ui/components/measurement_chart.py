@@ -15,7 +15,9 @@ def _measurement_chart_options(
     measurements: list[Measurement],
     start: datetime,
     end: datetime,
+    show_time: bool = True,
 ) -> dict[str, Any]:
+    tooltip_date_format = "%Y-%m-%d %H:%M" if show_time else "%Y-%m-%d"
     return {
         "animation": False,
         "backgroundColor": "transparent",
@@ -45,7 +47,15 @@ def _measurement_chart_options(
                 "type": "scatter",
                 "name": parameter.name,
                 "data": [
-                    [int(measurement.timestamp.timestamp() * 1000), measurement.value]
+                    {
+                        "name": measurement.timestamp.astimezone().strftime(
+                            tooltip_date_format
+                        ),
+                        "value": [
+                            int(measurement.timestamp.timestamp() * 1000),
+                            measurement.value,
+                        ],
+                    }
                     for measurement in measurements
                 ],
                 "symbol": "circle",
@@ -63,10 +73,12 @@ class MeasurementChart:
         record_service: RecordService,
         language: str,
         on_parameter_changed: Callable[[], None],
+        show_time: bool = True,
     ) -> None:
         self._record_service = record_service
         self._language = language
         self._on_parameter_changed = on_parameter_changed
+        self._show_time = show_time
 
         with ui.card().classes("w-full col-span-2"):
             ui.label(self._t("measurement_chart")).classes("text-h6")
@@ -140,7 +152,13 @@ class MeasurementChart:
             item for item in parameters if item.id == parameter_id
         )
         self._set_chart_options(
-            _measurement_chart_options(parameter, measurements, start, end)
+            _measurement_chart_options(
+                parameter,
+                measurements,
+                start,
+                end,
+                show_time=self._show_time,
+            )
         )
         self._chart.set_visibility(True)
         self._status.set_text(self._t("chart_no_data") if not measurements else "")

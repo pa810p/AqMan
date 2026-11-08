@@ -118,6 +118,29 @@ def test_fertilizer_application_chart_shows_separate_discrete_fertilizer_series(
     ]
 
 
+def test_fertilizer_chart_tooltip_omits_time_when_disabled() -> None:
+    timestamp = datetime(2026, 10, 30, 12, 45, tzinfo=timezone.utc)
+    fertilizer = Fertilizer(id=1, name="Potassium", dose_ml_per_100l=5)
+    application = FertilizerApplication(
+        id=1,
+        timestamp=timestamp,
+        fertilizer=fertilizer,
+        actual_dose_ml=2,
+    )
+
+    options = _fertilizer_application_chart_options(
+        [application],
+        "Dose (ml)",
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        datetime(2026, 11, 1, tzinfo=timezone.utc),
+        show_time=False,
+    )
+
+    assert options["series"][0]["data"][0]["name"] == (
+        timestamp.astimezone().strftime("%Y-%m-%d")
+    )
+
+
 def test_chart_refresh_and_clear_manage_empty_and_populated_states(monkeypatch) -> None:
     fake_ui = FakeChartUI()
     monkeypatch.setattr(chart_module, "ui", fake_ui)

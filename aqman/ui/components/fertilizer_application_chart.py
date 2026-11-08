@@ -24,7 +24,9 @@ def _fertilizer_application_chart_options(
     dose_axis_label: str,
     start: datetime,
     end: datetime,
+    show_time: bool = True,
 ) -> dict[str, Any]:
+    tooltip_date_format = "%Y-%m-%d %H:%M" if show_time else "%Y-%m-%d"
     grouped: dict[int, tuple[str, list[dict[str, Any]]]] = {}
     for application in applications:
         fertilizer = application.fertilizer
@@ -35,7 +37,7 @@ def _fertilizer_application_chart_options(
         points.append(
             {
                 "name": application.timestamp.astimezone().strftime(
-                    "%Y-%m-%d %H:%M"
+                    tooltip_date_format
                 ),
                 "value": [
                     int(application.timestamp.timestamp() * 1000),
@@ -97,9 +99,11 @@ class FertilizerApplicationChart:
         self,
         record_service: RecordService,
         language: str,
+        show_time: bool = True,
     ) -> None:
         self._record_service = record_service
         self._language = language
+        self._show_time = show_time
 
         with ui.card().classes("w-full"):
             ui.label(self._t("fertilizer_application_chart")).classes("text-h6")
@@ -128,6 +132,7 @@ class FertilizerApplicationChart:
                 self._t("chart_fertilizer_dose"),
                 start,
                 end,
+                show_time=self._show_time,
             )
         )
         self._chart.set_visibility(True)
