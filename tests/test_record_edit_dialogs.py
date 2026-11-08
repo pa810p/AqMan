@@ -82,6 +82,7 @@ def test_note_dialog_deletes_after_confirmation_and_reports_errors(monkeypatch):
     dialogs.open_note(4)
     note_dialog = fake_ui.dialogs[0]
     open_delete_confirmation = fake_ui.by_label(dialogs._t("delete_note"))
+    assert open_delete_confirmation.props_value == "color=negative flat"
     open_delete_confirmation.on_click()
     confirmation = fake_ui.dialogs[1]
     assert confirmation.opened
@@ -123,6 +124,10 @@ def test_measurement_invalid_parameter_save_and_delete_paths(monkeypatch):
 
     dialogs.open_measurement(9)
     assert fake_ui.by_label(dialogs._t("parameter")).options == {2: "NO3 (mg/L)"}
+    assert (
+        fake_ui.by_label(dialogs._t("delete_measurement")).props_value
+        == "color=negative flat"
+    )
     fake_ui.by_label(dialogs._t("parameter")).value = None
     fake_ui.by_label(dialogs._t("save")).on_click()
     assert isinstance(errors[-1], ValidationError)
@@ -197,6 +202,7 @@ def test_fertilizer_application_edit_and_invalid_fertilizer(monkeypatch):
     open_delete_confirmation = fake_ui.by_label(
         dialogs._t("delete_fertilizer_application")
     )
+    assert open_delete_confirmation.props_value == "color=negative flat"
     open_delete_confirmation.on_click()
     confirmation = fake_ui.dialogs[1]
     records.delete_fertilizer_application.side_effect = ValidationError("in use")
@@ -264,3 +270,52 @@ def test_water_change_lookup_failure(monkeypatch):
     assert errors == [failure]
     assert saved == []
     assert fake_ui.dialogs == []
+
+
+def test_water_change_dialog_deletes_after_confirmation_and_reports_errors(
+    monkeypatch,
+):
+    fake_ui, dialogs, records, _, _, saved, errors = build_dialogs(monkeypatch)
+    water_change = SimpleNamespace(
+        id=5,
+        timestamp=TIMESTAMP,
+        source=WaterSource.RO,
+        volume_liters=20,
+        description=None,
+    )
+    records.get_water_change.return_value = water_change
+
+    dialogs.open_water_change(5)
+    water_change_dialog = fake_ui.dialogs[0]
+    open_delete_confirmation = fake_ui.by_label(dialogs._t("delete_water_change"))
+    assert open_delete_confirmation.props_value == "color=negative flat"
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[1]
+    assert confirmation.opened
+
+    fake_ui.by_label(dialogs._t("cancel")).on_click()
+    assert confirmation.closed
+    assert not getattr(water_change_dialog, "closed", False)
+    assert records.delete_water_change.call_count == 0
+
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[2]
+    records.delete_water_change.side_effect = NotFoundError("already gone")
+    fake_ui.by_label(dialogs._t("delete_water_change")).on_click()
+    assert isinstance(errors[-1], NotFoundError)
+    assert confirmation.closed
+    assert not getattr(water_change_dialog, "closed", False)
+
+    open_delete_confirmation.on_click()
+    confirmation = fake_ui.dialogs[3]
+    records.delete_water_change.side_effect = None
+    fake_ui.by_label(dialogs._t("delete_water_change")).on_click()
+
+    assert records.delete_water_change.call_count == 2
+    assert confirmation.closed
+    assert water_change_dialog.closed
+    assert saved == [True]
+    assert fake_ui.notifications[-1] == (
+        dialogs._t("deleted_water_change"),
+        "positive",
+    )

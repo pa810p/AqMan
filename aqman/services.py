@@ -840,6 +840,24 @@ class RecordService:
         logger.info("Updated water change id=%s aquarium_id=%s", water_change_id, aquarium_id)
         return water_change
 
+    def delete_water_change(self, aquarium_id: int, water_change_id: int) -> None:
+        with self._session_factory.begin() as session:
+            if repositories.get_aquarium(session, aquarium_id) is None:
+                raise NotFoundError("Aquarium not found.")
+            water_change = repositories.get_water_change(
+                session,
+                aquarium_id,
+                water_change_id,
+            )
+            if water_change is None:
+                raise NotFoundError("Water change not found.")
+            repositories.delete_water_change(session, water_change)
+        logger.info(
+            "Deleted water change id=%s aquarium_id=%s",
+            water_change_id,
+            aquarium_id,
+        )
+
     def water_changes(self, aquarium_id: int) -> list[WaterChange]:
         with self._session_factory() as session:
             if repositories.get_aquarium(session, aquarium_id) is None:

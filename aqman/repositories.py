@@ -437,6 +437,10 @@ def get_water_change(
     return session.scalar(statement)
 
 
+def delete_water_change(session: Session, water_change: WaterChange) -> None:
+    session.delete(water_change)
+
+
 def list_water_changes(session: Session, aquarium_id: int) -> list[WaterChange]:
     statement = (
         select(WaterChange)

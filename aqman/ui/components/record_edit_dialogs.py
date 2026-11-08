@@ -209,14 +209,18 @@ class RecordEditDialogs:
                         ).props("color=negative")
                 confirmation.open()
 
-            with ui.row().classes("justify-end"):
-                ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
-                ui.button(self._t("save"), on_click=save, icon="save")
+            with ui.row().classes("w-full justify-between"):
                 ui.button(
                     self._t("delete_measurement"),
                     icon="delete",
                     on_click=confirm_delete,
-                ).props("color=negative")
+                ).props("color=negative flat")
+                with ui.row().classes("justify-end"):
+                    ui.button(
+                        self._t("cancel"),
+                        on_click=dialog.close,
+                    ).props("flat")
+                    ui.button(self._t("save"), on_click=save, icon="save")
         dialog.open()
 
     def open_fertilizer_application(self, application_id: int) -> None:
@@ -379,9 +383,49 @@ class RecordEditDialogs:
                 ui.notify(self._t("updated_water_change"), type="positive")
                 self._on_saved()
 
-            with ui.row().classes("justify-end"):
-                ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
-                ui.button(self._t("save"), on_click=save, icon="save")
+            def confirm_delete() -> None:
+                with ui.dialog() as confirmation, ui.card().classes("w-full max-w-md"):
+                    ui.label(self._t("confirm_delete_water_change"))
+
+                    def delete() -> None:
+                        try:
+                            self._record_service.delete_water_change(
+                                aquarium_id,
+                                water_change.id,
+                            )
+                        except (ValidationError, NotFoundError) as error:
+                            self._on_error(error)
+                            confirmation.close()
+                            return
+                        confirmation.close()
+                        dialog.close()
+                        ui.notify(
+                            self._t("deleted_water_change"),
+                            type="positive",
+                        )
+                        self._on_saved()
+
+                    with ui.row().classes("justify-end"):
+                        ui.button(
+                            self._t("cancel"),
+                            on_click=confirmation.close,
+                        ).props("flat")
+                        ui.button(
+                            self._t("delete_water_change"),
+                            icon="delete",
+                            on_click=delete,
+                        ).props("color=negative")
+                confirmation.open()
+
+            with ui.row().classes("w-full justify-between"):
+                ui.button(
+                    self._t("delete_water_change"),
+                    icon="delete",
+                    on_click=confirm_delete,
+                ).props("color=negative flat")
+                with ui.row().classes("justify-end"):
+                    ui.button(self._t("cancel"), on_click=dialog.close).props("flat")
+                    ui.button(self._t("save"), on_click=save, icon="save")
         dialog.open()
 
     def _t(self, key: str) -> str:

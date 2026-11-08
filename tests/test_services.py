@@ -424,6 +424,33 @@ def test_water_change_edit_is_scoped_to_its_aquarium(services) -> None:
     assert unchanged_change.volume_liters == 15
 
 
+def test_water_change_can_be_deleted_and_deletion_is_scoped_to_aquarium(
+    services,
+) -> None:
+    aquariums, _, records = services
+    aquarium = aquariums.create_aquarium("Community", 180, None)
+    other_aquarium = aquariums.create_aquarium("Other", 40, None)
+    records.add_water_change(
+        aquarium.id,
+        datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc),
+        WaterSource.RO,
+        15,
+        None,
+    )
+    [water_change] = records.water_changes(aquarium.id)
+
+    with pytest.raises(NotFoundError, match="Water change not found"):
+        records.delete_water_change(other_aquarium.id, water_change.id)
+    assert len(records.water_changes(aquarium.id)) == 1
+
+    records.delete_water_change(aquarium.id, water_change.id)
+
+    assert records.water_changes(aquarium.id) == []
+    assert records.daily_history(aquarium.id) == []
+    with pytest.raises(NotFoundError, match="Water change not found"):
+        records.delete_water_change(aquarium.id, water_change.id)
+
+
 def test_daily_history_groups_same_day_records_and_keeps_all_entries(services) -> None:
     aquariums, parameters, records = services
     aquarium = aquariums.create_aquarium("Daily", 80, None)

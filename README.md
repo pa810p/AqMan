@@ -4,11 +4,6 @@ Local application for keeping aquarium measurements, notes, and water-change his
 The interface defaults to English and can be switched to Polish with the flag buttons in
 the application header.
 
-Notes in the activity history can be edited or deleted; deletion requires confirmation.
-Notes entered with measurements or fertilizer applications are prefixed with the
-parameter or fertilizer name (for example, `pH: ...` or `Nitrate: ...`) to make their
-context clear.
-
 Aquarium cards can include an optional JPEG, PNG, or WebP photo (up to 8 MB). Photos are
 cropped to compact thumbnails and stored in the local SQLite database with the aquarium.
 Each fertilizer can have a default target increase in ppm, which is preselected when
