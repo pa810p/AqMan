@@ -115,7 +115,8 @@ class FakeElement:
 
 
 class FakeTabs(FakeElement):
-    pass
+    def on_value_change(self, callback):
+        self.value_change_callback = callback
 
 
 class FakeUI:
@@ -129,6 +130,8 @@ class FakeUI:
         self.navigation: list[str] = []
         self.context = SimpleNamespace(client=SimpleNamespace(page=SimpleNamespace()))
         self.navigate = SimpleNamespace(to=self.navigation.append)
+        self.tab_elements: list[FakeElement] = []
+        self.tabs_element: FakeTabs | None = None
 
     def colors(self, **colors: str) -> None:
         self.colors_value = colors
@@ -151,10 +154,13 @@ class FakeUI:
         return element
 
     def tabs(self):
-        return FakeTabs()
+        self.tabs_element = FakeTabs()
+        return self.tabs_element
 
     def tab(self, text: str):
-        return FakeElement(text=text)
+        tab = FakeElement(text=text)
+        self.tab_elements.append(tab)
+        return tab
 
     def tab_panels(self, *_args: object, **_kwargs: object):
         return FakeElement()
@@ -200,6 +206,7 @@ class FakeComponent:
         self.kwargs = kwargs
         self.refresh_calls = 0
         self.reset_calls = 0
+        self.datetime_refresh_calls = 0
         self.opened: list[object] = []
         self.values = None
 
@@ -214,6 +221,9 @@ class FakeComponent:
 
     def reset_after_save(self) -> None:
         self.reset_calls += 1
+
+    def refresh_datetime(self) -> None:
+        self.datetime_refresh_calls += 1
 
     def open(self, *args: object) -> None:
         self.opened.append(args[0] if args else None)
@@ -341,6 +351,8 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
     _click_button(fake_ui, "Open aquarium")
     assert instances["ActivityHistory"][0].refresh_calls == 2
     assert instances["AquariumCharts"][0].refresh_calls == 2
+    assert instances["MeasurementForm"][0].datetime_refresh_calls == 1
+    assert instances["FertilizerApplicationForm"][0].datetime_refresh_calls == 1
 
     _click_button(fake_ui, "Edit aquarium")
     assert instances["AquariumDialog"][0].opened == [aquarium]
@@ -419,6 +431,21 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
         notification[1]["type"] == "positive"
         for notification in fake_ui.notifications
     )
+
+
+def test_opening_aquarium_detail_tab_refreshes_entry_form_datetimes(ui_assembly) -> None:
+    fake_ui, instances, *_ = ui_assembly
+
+    fake_ui.tabs_element.value_change_callback(SimpleNamespace(value="Dashboard"))
+    assert instances["MeasurementForm"][0].datetime_refresh_calls == 0
+    assert instances["FertilizerApplicationForm"][0].datetime_refresh_calls == 0
+
+    fake_ui.tabs_element.value_change_callback(
+        SimpleNamespace(value="Aquarium details")
+    )
+
+    assert instances["MeasurementForm"][0].datetime_refresh_calls == 1
+    assert instances["FertilizerApplicationForm"][0].datetime_refresh_calls == 1
 
 
 def test_build_ui_reports_missing_selection_and_missing_aquarium(ui_assembly) -> None:

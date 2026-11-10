@@ -305,9 +305,14 @@ def build_ui(
         nonlocal selected_aquarium_id
         selected_aquarium_id = aquarium_id
         aquarium_detail_tab.set_visibility(True)
+        refresh_form_datetimes()
         refresh_all()
         tabs.value = aquarium_detail_tab
         tabs.update()
+
+    def refresh_form_datetimes() -> None:
+        measurement_form.refresh_datetime()
+        fertilizer_application_form.refresh_datetime()
 
     def edit_current_aquarium() -> None:
         try:
@@ -539,5 +544,11 @@ def build_ui(
         form.reset_after_save()
         ui.notify(t("saved_fertilizer_application"), type="positive")
         refresh_all()
+
+    def refresh_entry_forms_on_tab_change(event) -> None:
+        if event.value == t("tab_aquarium_detail"):
+            refresh_form_datetimes()
+
+    tabs.on_value_change(refresh_entry_forms_on_tab_change)
 
     refresh_all()

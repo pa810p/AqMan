@@ -139,6 +139,9 @@ class FertilizerApplicationForm:
 
     def reset_after_save(self) -> None:
         self._notes.value = ""
+        self.refresh_datetime()
+
+    def refresh_datetime(self) -> None:
         self._datetime.set_value(datetime.now().astimezone())
 
     def _refresh_parameters(self) -> None:

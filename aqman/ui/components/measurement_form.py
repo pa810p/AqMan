@@ -94,6 +94,9 @@ class MeasurementForm:
     def reset_after_save(self) -> None:
         self._value.value = None
         self._note.value = ""
+        self.refresh_datetime()
+
+    def refresh_datetime(self) -> None:
         self._datetime.set_value(datetime.now().astimezone())
 
     def _t(self, key: str) -> str:
