@@ -7,7 +7,11 @@ from nicegui import ui
 from aqman.models import Measurement, Parameter
 from aqman.services import RecordService, ValidationError
 from aqman.translations import translate
-from aqman.ui.components.chart_axis import x_axis_date_format
+from aqman.ui.components.chart_axis import (
+    format_tooltip_datetime,
+    x_axis_date_format,
+)
+from aqman.ui.components.select_options import retain_or_first_option
 
 
 def _measurement_chart_options(
@@ -17,7 +21,6 @@ def _measurement_chart_options(
     end: datetime,
     show_time: bool = True,
 ) -> dict[str, Any]:
-    tooltip_date_format = "%Y-%m-%d %H:%M" if show_time else "%Y-%m-%d"
     return {
         "animation": False,
         "backgroundColor": "transparent",
@@ -48,8 +51,8 @@ def _measurement_chart_options(
                 "name": parameter.name,
                 "data": [
                     {
-                        "name": measurement.timestamp.astimezone().strftime(
-                            tooltip_date_format
+                        "name": format_tooltip_datetime(
+                            measurement.timestamp, show_time
                         ),
                         "value": [
                             int(measurement.timestamp.timestamp() * 1000),
@@ -107,14 +110,9 @@ class MeasurementChart:
             parameter.id: f"{parameter.name} ({parameter.unit})"
             for parameter in parameters
         }
-        try:
-            previous_parameter_id = int(self._parameter.value)
-        except (TypeError, ValueError):
-            previous_parameter_id = None
-        parameter_id = (
-            previous_parameter_id
-            if previous_parameter_id in parameter_options
-            else next(iter(parameter_options), None)
+        parameter_id = retain_or_first_option(
+            self._parameter.value,
+            parameter_options,
         )
         self._parameter.options = parameter_options
         self._parameter.value = parameter_id

@@ -54,7 +54,7 @@ class NoteForm:
     def reset_after_save(self) -> None:
         self._category.value = ""
         self._content.value = ""
-        self._datetime.set_value(datetime.now().astimezone())
+        self._datetime.set_to_now()
 
     def _t(self, key: str) -> str:
         return translate(self._language, key)

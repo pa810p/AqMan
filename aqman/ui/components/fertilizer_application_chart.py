@@ -1,4 +1,5 @@
-from datetime import datetime
+from collections import defaultdict
+from datetime import date, datetime
 from typing import Any
 
 from nicegui import ui
@@ -6,7 +7,10 @@ from nicegui import ui
 from aqman.models import FertilizerApplication
 from aqman.services import RecordService
 from aqman.translations import translate
-from aqman.ui.components.chart_axis import x_axis_date_format
+from aqman.ui.components.chart_axis import (
+    format_tooltip_datetime,
+    x_axis_date_format,
+)
 
 _SERIES_COLORS = (
     "#7acb84",
@@ -17,6 +21,7 @@ _SERIES_COLORS = (
     "#a997e8",
     "#6fc9c0",
 )
+_STACKED_POINT_OFFSET_PX = 4
 
 
 def _fertilizer_application_chart_options(
@@ -26,25 +31,24 @@ def _fertilizer_application_chart_options(
     end: datetime,
     show_time: bool = True,
 ) -> dict[str, Any]:
-    tooltip_date_format = "%Y-%m-%d %H:%M" if show_time else "%Y-%m-%d"
+    symbol_offsets = _same_day_same_dose_offsets(applications)
     grouped: dict[int, tuple[str, list[dict[str, Any]]]] = {}
-    for application in applications:
+    for application_index, application in enumerate(applications):
         fertilizer = application.fertilizer
         points = grouped.setdefault(
             fertilizer.id,
             (fertilizer.name, []),
         )[1]
-        points.append(
-            {
-                "name": application.timestamp.astimezone().strftime(
-                    tooltip_date_format
-                ),
-                "value": [
-                    int(application.timestamp.timestamp() * 1000),
-                    application.actual_dose_ml,
-                ],
-            }
-        )
+        point: dict[str, Any] = {
+            "name": format_tooltip_datetime(application.timestamp, show_time),
+            "value": [
+                int(application.timestamp.timestamp() * 1000),
+                application.actual_dose_ml,
+            ],
+        }
+        if symbol_offsets[application_index]:
+            point["symbolOffset"] = [symbol_offsets[application_index], 0]
+        points.append(point)
 
     ordered_groups = sorted(
         grouped.values(),
@@ -92,6 +96,33 @@ def _fertilizer_application_chart_options(
         ],
         "textStyle": {"color": "#eaf3eb"},
     }
+
+
+def _same_day_same_dose_offsets(
+    applications: list[FertilizerApplication],
+) -> list[int]:
+    applications_by_day_and_dose: dict[
+        tuple[date, float], list[int]
+    ] = defaultdict(list)
+    for index, application in enumerate(applications):
+        key = (application.timestamp.astimezone().date(), application.actual_dose_ml)
+        applications_by_day_and_dose[key].append(index)
+
+    offsets = [0] * len(applications)
+    for indexes in applications_by_day_and_dose.values():
+        if len(indexes) < 2:
+            continue
+        ordered_indexes = sorted(
+            indexes,
+            key=lambda index: (
+                applications[index].timestamp,
+                applications[index].id or 0,
+                index,
+            ),
+        )
+        for stack_position, index in enumerate(ordered_indexes):
+            offsets[index] = stack_position * _STACKED_POINT_OFFSET_PX
+    return offsets
 
 
 class FertilizerApplicationChart:

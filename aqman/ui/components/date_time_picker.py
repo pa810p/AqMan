@@ -131,6 +131,9 @@ class DateTimePicker:
         )
         self.element.update()
 
+    def set_to_now(self) -> None:
+        self.set_value(datetime.now().astimezone())
+
     def _create_numeric_wheel(
         self,
         number_of_values: int,

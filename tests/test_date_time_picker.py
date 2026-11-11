@@ -166,6 +166,38 @@ def test_wheel_clicks_update_input_once_and_programmatic_set_does_not_notify(
     assert len(changed) == 1
 
 
+@pytest.mark.parametrize(
+    ("show_time", "expected_format"),
+    [
+        (True, "%Y-%m-%d %H:%M"),
+        (False, "%Y-%m-%d"),
+    ],
+)
+def test_set_to_now_respects_time_visibility(
+    picker_ui,
+    monkeypatch,
+    show_time: bool,
+    expected_format: str,
+) -> None:
+    fixed_now = datetime(2026, 11, 10, 14, 30, tzinfo=timezone.utc)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(picker_module, "datetime", FixedDateTime)
+    picker = DateTimePicker(
+        "Observed at",
+        datetime(2020, 1, 1, tzinfo=timezone.utc),
+        show_time=show_time,
+    )
+
+    picker.set_to_now()
+
+    assert picker.element.value == fixed_now.astimezone().strftime(expected_format)
+
+
 def test_wheel_scroll_clamps_at_bounds_and_waits_until_centered(picker_ui) -> None:
     picker = DateTimePicker(
         "Observed at",

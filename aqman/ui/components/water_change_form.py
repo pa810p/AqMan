@@ -75,7 +75,7 @@ class WaterChangeForm:
     def reset_after_save(self) -> None:
         self._volume.value = None
         self._description.value = ""
-        self._datetime.set_value(datetime.now().astimezone())
+        self._datetime.set_to_now()
 
     def _t(self, key: str) -> str:
         return translate(self._language, key)

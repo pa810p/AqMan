@@ -141,6 +141,48 @@ def test_fertilizer_chart_tooltip_omits_time_when_disabled() -> None:
     )
 
 
+def test_same_day_applications_with_equal_doses_are_stacked_side_by_side() -> None:
+    timestamp = datetime(2026, 10, 30, 12, 45, tzinfo=timezone.utc)
+    older_fertilizer = Fertilizer(id=1, name="Older", dose_ml_per_100l=5)
+    newer_fertilizer = Fertilizer(id=2, name="Newer", dose_ml_per_100l=5)
+    applications = [
+        FertilizerApplication(
+            id=1,
+            timestamp=timestamp,
+            fertilizer=older_fertilizer,
+            actual_dose_ml=2,
+        ),
+        FertilizerApplication(
+            id=2,
+            timestamp=timestamp,
+            fertilizer=newer_fertilizer,
+            actual_dose_ml=2,
+        ),
+    ]
+
+    options = _fertilizer_application_chart_options(
+        applications,
+        "Dose (ml)",
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        datetime(2026, 11, 1, tzinfo=timezone.utc),
+    )
+    points = {
+        series["name"]: series["data"][0]
+        for series in options["series"]
+    }
+
+    assert points["Older"]["value"] == [
+        int(timestamp.timestamp() * 1000),
+        2,
+    ]
+    assert "symbolOffset" not in points["Older"]
+    assert points["Newer"]["value"] == [
+        int(timestamp.timestamp() * 1000),
+        2,
+    ]
+    assert points["Newer"]["symbolOffset"] == [4, 0]
+
+
 def test_chart_refresh_and_clear_manage_empty_and_populated_states(monkeypatch) -> None:
     fake_ui = FakeChartUI()
     monkeypatch.setattr(chart_module, "ui", fake_ui)

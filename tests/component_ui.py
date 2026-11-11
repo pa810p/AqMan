@@ -162,6 +162,9 @@ class FakeDateTimePicker:
     def set_value(self, value):
         self.value = value
 
+    def set_to_now(self):
+        self.set_value(datetime.now().astimezone())
+
 
 def install_ui(monkeypatch, *modules):
     fake_ui = FakeUI()

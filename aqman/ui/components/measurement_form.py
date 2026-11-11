@@ -10,6 +10,7 @@ from aqman.models import Parameter
 from aqman.services import ValidationError
 from aqman.translations import translate
 from aqman.ui.components.date_time_picker import DateTimePicker
+from aqman.ui.components.select_options import retain_or_first_option
 
 
 @dataclass(frozen=True)
@@ -79,15 +80,10 @@ class MeasurementForm:
             parameter.id: f"{parameter.name} ({parameter.unit})"
             for parameter in parameters
         }
-        try:
-            previous_parameter_id = int(self._parameter.value)
-        except (TypeError, ValueError):
-            previous_parameter_id = None
         self._parameter.options = options
-        self._parameter.value = (
-            previous_parameter_id
-            if previous_parameter_id in options
-            else next(iter(options), None)
+        self._parameter.value = retain_or_first_option(
+            self._parameter.value,
+            options,
         )
         self._parameter.update()
 
@@ -97,7 +93,7 @@ class MeasurementForm:
         self.refresh_datetime()
 
     def refresh_datetime(self) -> None:
-        self._datetime.set_value(datetime.now().astimezone())
+        self._datetime.set_to_now()
 
     def _t(self, key: str) -> str:
         return translate(self._language, key)

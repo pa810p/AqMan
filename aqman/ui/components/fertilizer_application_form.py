@@ -19,6 +19,7 @@ from aqman.services import (
 )
 from aqman.translations import translate
 from aqman.ui.components.date_time_picker import DateTimePicker
+from aqman.ui.components.select_options import retain_or_first_option
 
 _SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
@@ -124,15 +125,10 @@ class FertilizerApplicationForm:
         fertilizer_options = {
             fertilizer.id: fertilizer.name for fertilizer in fertilizers
         }
-        try:
-            previous_fertilizer_id = int(self._fertilizer.value)
-        except (TypeError, ValueError):
-            previous_fertilizer_id = None
         self._fertilizer.options = fertilizer_options
-        self._fertilizer.value = (
-            previous_fertilizer_id
-            if previous_fertilizer_id in fertilizer_options
-            else next(iter(fertilizer_options), None)
+        self._fertilizer.value = retain_or_first_option(
+            self._fertilizer.value,
+            fertilizer_options,
         )
         self._fertilizer.update()
         self._refresh_parameters()
@@ -142,7 +138,7 @@ class FertilizerApplicationForm:
         self.refresh_datetime()
 
     def refresh_datetime(self) -> None:
-        self._datetime.set_value(datetime.now().astimezone())
+        self._datetime.set_to_now()
 
     def _refresh_parameters(self) -> None:
         fertilizer = self._selected_fertilizer()
@@ -159,15 +155,10 @@ class FertilizerApplicationForm:
             if fertilizer is not None
             else {}
         )
-        try:
-            previous_parameter_id = int(self._target_parameter.value)
-        except (TypeError, ValueError):
-            previous_parameter_id = None
         self._target_parameter.options = effect_options
-        self._target_parameter.value = (
-            previous_parameter_id
-            if previous_parameter_id in effect_options
-            else next(iter(effect_options), None)
+        self._target_parameter.value = retain_or_first_option(
+            self._target_parameter.value,
+            effect_options,
         )
         self._target_parameter.update()
         self._refresh_recommendation()
