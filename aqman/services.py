@@ -78,6 +78,25 @@ def _finite_number(value: float, label: str) -> float:
     return number
 
 
+def _optional_finite_number(value: float | None, label: str) -> float | None:
+    return None if value is None else _finite_number(value, label)
+
+
+def _parameter_chart_scale(
+    minimum: float | None,
+    maximum: float | None,
+) -> tuple[float | None, float | None]:
+    clean_minimum = _optional_finite_number(minimum, "Chart scale minimum")
+    clean_maximum = _optional_finite_number(maximum, "Chart scale maximum")
+    if (
+        clean_minimum is not None
+        and clean_maximum is not None
+        and clean_minimum >= clean_maximum
+    ):
+        raise ValidationError("Chart scale minimum must be less than maximum.")
+    return clean_minimum, clean_maximum
+
+
 def _utc_datetime(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValidationError("Date and time must include a time zone.")
@@ -177,18 +196,60 @@ class ParameterService:
         with self._session_factory() as session:
             return repositories.list_parameters(session)
 
-    def create_parameter(self, name: str, unit: str, description: str | None) -> Parameter:
+    def create_parameter(
+        self,
+        name: str,
+        unit: str,
+        description: str | None,
+        chart_min_value: float | None = None,
+        chart_max_value: float | None = None,
+    ) -> Parameter:
         clean_name = _required_text(name, "Parameter name", 80)
         clean_unit = _required_text(unit, "Unit", 30)
         clean_description = _clean_optional_text(description)
+        clean_chart_min, clean_chart_max = _parameter_chart_scale(
+            chart_min_value,
+            chart_max_value,
+        )
         with self._session_factory.begin() as session:
             parameter = repositories.add_parameter(
                 session,
                 name=clean_name,
                 unit=clean_unit,
                 description=clean_description,
+                chart_min_value=clean_chart_min,
+                chart_max_value=clean_chart_max,
             )
         logger.info("Created parameter id=%s", parameter.id)
+        return parameter
+
+    def update_parameter(
+        self,
+        parameter_id: int,
+        name: str,
+        unit: str,
+        description: str | None,
+        chart_min_value: float | None = None,
+        chart_max_value: float | None = None,
+    ) -> Parameter:
+        clean_name = _required_text(name, "Parameter name", 80)
+        clean_unit = _required_text(unit, "Unit", 30)
+        clean_description = _clean_optional_text(description)
+        clean_chart_min, clean_chart_max = _parameter_chart_scale(
+            chart_min_value,
+            chart_max_value,
+        )
+        with self._session_factory.begin() as session:
+            parameter = repositories.get_parameter(session, parameter_id)
+            if parameter is None:
+                raise NotFoundError("Parameter not found.")
+            parameter.name = clean_name
+            parameter.unit = clean_unit
+            parameter.description = clean_description
+            parameter.chart_min_value = clean_chart_min
+            parameter.chart_max_value = clean_chart_max
+            session.flush()
+        logger.info("Updated parameter id=%s", parameter_id)
         return parameter
 
     def delete_parameter(self, parameter_id: int) -> None:

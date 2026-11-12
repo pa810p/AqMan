@@ -83,11 +83,20 @@ class Aquarium(Base):
 
 class Parameter(Base):
     __tablename__ = "parameters"
+    __table_args__ = (
+        CheckConstraint(
+            "chart_min_value IS NULL OR chart_max_value IS NULL "
+            "OR chart_min_value < chart_max_value",
+            name="ck_parameters_chart_scale_order",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     unit: Mapped[str] = mapped_column(String(30), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    chart_min_value: Mapped[float | None] = mapped_column(Float)
+    chart_max_value: Mapped[float | None] = mapped_column(Float)
 
     measurements: Mapped[list["Measurement"]] = relationship(back_populates="parameter")
     fertilizer_effects: Mapped[list["FertilizerEffect"]] = relationship(

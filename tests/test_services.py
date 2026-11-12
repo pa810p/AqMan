@@ -95,6 +95,82 @@ def test_unused_parameter_can_be_deleted(services) -> None:
         parameters.delete_parameter(parameter.id)
 
 
+def test_parameter_chart_scale_can_be_created_edited_and_cleared(services) -> None:
+    _, parameters, _ = services
+    default_parameter = parameters.create_parameter("pH", "—", None)
+    scaled_parameter = parameters.create_parameter(
+        "NO3",
+        "mg/L",
+        "Nitrate",
+        chart_min_value=5,
+        chart_max_value=40,
+    )
+
+    assert default_parameter.chart_min_value is None
+    assert default_parameter.chart_max_value is None
+    assert scaled_parameter.chart_min_value == 5
+    assert scaled_parameter.chart_max_value == 40
+
+    updated = parameters.update_parameter(
+        scaled_parameter.id,
+        "NO3",
+        "ppm",
+        None,
+        chart_min_value=10,
+        chart_max_value=30,
+    )
+
+    assert updated.name == "NO3"
+    assert updated.unit == "ppm"
+    assert updated.description is None
+    assert updated.chart_min_value == 10
+    assert updated.chart_max_value == 30
+
+    cleared = parameters.update_parameter(
+        scaled_parameter.id,
+        "NO3",
+        "ppm",
+        None,
+    )
+
+    assert cleared.chart_min_value is None
+    assert cleared.chart_max_value is None
+
+
+@pytest.mark.parametrize(
+    ("minimum", "maximum", "message"),
+    [
+        (10, 10, "minimum must be less than maximum"),
+        (20, 10, "minimum must be less than maximum"),
+        (float("nan"), None, "minimum must be a finite number"),
+        (None, float("inf"), "maximum must be a finite number"),
+    ],
+)
+def test_parameter_chart_scale_rejects_invalid_bounds(
+    services,
+    minimum: float | None,
+    maximum: float | None,
+    message: str,
+) -> None:
+    _, parameters, _ = services
+
+    with pytest.raises(ValidationError, match=message):
+        parameters.create_parameter(
+            "NO3",
+            "mg/L",
+            None,
+            chart_min_value=minimum,
+            chart_max_value=maximum,
+        )
+
+
+def test_updating_unknown_parameter_reports_not_found(services) -> None:
+    _, parameters, _ = services
+
+    with pytest.raises(NotFoundError, match="Parameter not found"):
+        parameters.update_parameter(42, "NO3", "mg/L", None)
+
+
 def test_parameter_with_measurements_cannot_be_deleted(services) -> None:
     aquariums, parameters, records = services
     aquarium = aquariums.create_aquarium("Nano", 35, None)

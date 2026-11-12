@@ -174,6 +174,36 @@ def test_measurement_chart_options_show_measurement_date_and_parameter_units(
     ]
 
 
+@pytest.mark.parametrize(
+    ("chart_min_value", "chart_max_value", "expected_min", "expected_max"),
+    [
+        (None, None, 0, "dataMax"),
+        (5, None, 5, "dataMax"),
+        (None, 40, 0, 40),
+        (5, 40, 5, 40),
+    ],
+)
+def test_measurement_chart_uses_parameter_scale_bounds(
+    chart_min_value,
+    chart_max_value,
+    expected_min,
+    expected_max,
+) -> None:
+    parameter = Parameter(
+        name="NO3",
+        unit="mg/L",
+        chart_min_value=chart_min_value,
+        chart_max_value=chart_max_value,
+    )
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 31, tzinfo=timezone.utc)
+
+    options = _measurement_chart_options(parameter, [], start, end)
+
+    assert options["yAxis"]["min"] == expected_min
+    assert options["yAxis"]["max"] == expected_max
+
+
 def test_parameter_change_refreshes_only_the_measurement_chart() -> None:
     start = datetime(2026, 10, 1, tzinfo=timezone.utc)
     end = datetime(2026, 10, 31, tzinfo=timezone.utc)

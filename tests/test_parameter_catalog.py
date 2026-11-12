@@ -20,7 +20,7 @@ class FakeElement:
         self.text = text
         self.icon = icon
         self.on_click = on_click
-        self.value: str | None = None
+        self.value: Any = None
         self.opened = False
         self.closed = False
         self.cleared = False
@@ -56,6 +56,7 @@ class FakeUI:
         self.buttons: list[FakeElement] = []
         self.inputs: list[FakeElement] = []
         self.textareas: list[FakeElement] = []
+        self.numbers: list[FakeElement] = []
         self.columns: list[FakeElement] = []
         self.dialogs: list[FakeElement] = []
         self.notifications: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -93,14 +94,27 @@ class FakeUI:
         self.buttons.append(element)
         return element
 
-    def input(self, text: str) -> FakeElement:
+    def input(self, text: str, value: str = "") -> FakeElement:
         element = FakeElement(text=text)
+        element.value = value
         self.inputs.append(element)
         return element
 
-    def textarea(self, text: str) -> FakeElement:
+    def textarea(self, text: str, value: str = "") -> FakeElement:
         element = FakeElement(text=text)
+        element.value = value
         self.textareas.append(element)
+        return element
+
+    def number(
+        self,
+        text: str,
+        value: float | None = None,
+        **_kwargs: object,
+    ) -> FakeElement:
+        element = FakeElement(text=text)
+        element.value = value
+        self.numbers.append(element)
         return element
 
     def separator(self) -> FakeElement:
@@ -183,21 +197,71 @@ def test_open_dialog_saves_parameter_and_notifies(catalog_setup) -> None:
     fake_ui.inputs[0].value = "NO3"
     fake_ui.inputs[1].value = "ppm"
     fake_ui.textareas[0].value = "Nitrate"
+    fake_ui.numbers[0].value = 5
+    fake_ui.numbers[1].value = 40
     service.create_parameter.return_value = Parameter(
         id=1,
         name="NO3",
         unit="ppm",
         description="Nitrate",
+        chart_min_value=5,
+        chart_max_value=40,
     )
 
     _click_button(fake_ui, "save")
 
-    service.create_parameter.assert_called_once_with("NO3", "ppm", "Nitrate")
+    service.create_parameter.assert_called_once_with(
+        "NO3",
+        "ppm",
+        "Nitrate",
+        5,
+        40,
+    )
     assert fake_ui.dialogs[0].opened
     assert fake_ui.dialogs[0].closed
     assert fake_ui.notifications == [
         (("saved_parameter",), {"type": "positive"}),
     ]
+    assert saved == [True]
+    assert errors == []
+
+
+def test_refresh_opens_parameter_editor_with_existing_values(catalog_setup) -> None:
+    catalog, fake_ui, service, _, saved, errors = catalog_setup
+    parameter = Parameter(
+        id=7,
+        name="NO3",
+        unit="mg/L",
+        description="Nitrate",
+        chart_min_value=5,
+        chart_max_value=40,
+    )
+    service.list_parameters.return_value = [parameter]
+
+    catalog.refresh()
+
+    edit_button = next(button for button in fake_ui.buttons if button.icon == "edit")
+    assert edit_button.on_click is not None
+    edit_button.on_click()
+
+    assert [control.value for control in fake_ui.inputs] == ["NO3", "mg/L"]
+    assert fake_ui.textareas[0].value == "Nitrate"
+    assert [control.value for control in fake_ui.numbers] == [5, 40]
+
+    _click_button(fake_ui, "save")
+
+    service.update_parameter.assert_called_once_with(
+        7,
+        "NO3",
+        "mg/L",
+        "Nitrate",
+        5,
+        40,
+    )
+    assert fake_ui.notifications[-1] == (
+        ("updated_parameter",),
+        {"type": "positive"},
+    )
     assert saved == [True]
     assert errors == []
 

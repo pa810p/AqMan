@@ -55,6 +55,10 @@ class ParameterCatalog:
                         if parameter.description:
                             ui.label(parameter.description).classes("text-body2")
                     ui.button(
+                        icon="edit",
+                        on_click=lambda item=parameter: self.open_dialog(item),
+                    ).props("flat round").tooltip(self._t("edit_parameter"))
+                    ui.button(
                         icon="delete",
                         on_click=lambda parameter_id=parameter.id: self.confirm_delete(
                             parameter_id
@@ -62,27 +66,73 @@ class ParameterCatalog:
                     ).props("flat round").tooltip(self._t("delete_parameter"))
                 ui.separator()
 
-    def open_dialog(self) -> None:
+    def open_dialog(self, parameter: Parameter | None = None) -> None:
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
-            ui.label(self._t("add_parameter_dialog")).classes("text-h6")
-            name_input = ui.input(self._t("parameter_name_hint")).classes("w-full")
-            unit_input = ui.input(self._t("unit_hint")).classes("w-full")
-            description_input = ui.textarea(
-                self._t("optional_description")
+            ui.label(
+                self._t(
+                    "edit_parameter_dialog"
+                    if parameter is not None
+                    else "add_parameter_dialog"
+                )
+            ).classes("text-h6")
+            name_input = ui.input(
+                self._t("parameter_name_hint"),
+                value=parameter.name if parameter is not None else "",
             ).classes("w-full")
+            unit_input = ui.input(
+                self._t("unit_hint"),
+                value=parameter.unit if parameter is not None else "",
+            ).classes("w-full")
+            description_input = ui.textarea(
+                self._t("optional_description"),
+                value=parameter.description or "" if parameter is not None else "",
+            ).classes("w-full")
+            chart_min_input = ui.number(
+                self._t("parameter_scale_min"),
+                value=(
+                    parameter.chart_min_value
+                    if parameter is not None
+                    else None
+                ),
+                step=0.1,
+            ).classes("w-full")
+            chart_max_input = ui.number(
+                self._t("parameter_scale_max"),
+                value=(
+                    parameter.chart_max_value
+                    if parameter is not None
+                    else None
+                ),
+                step=0.1,
+            ).classes("w-full")
+            ui.label(self._t("parameter_scale_hint")).classes("text-body2")
 
             def save() -> None:
                 try:
-                    self._parameter_service.create_parameter(
-                        name_input.value or "",
-                        unit_input.value or "",
-                        description_input.value,
-                    )
-                except ValidationError as error:
+                    if parameter is None:
+                        self._parameter_service.create_parameter(
+                            name_input.value or "",
+                            unit_input.value or "",
+                            description_input.value,
+                            chart_min_input.value,
+                            chart_max_input.value,
+                        )
+                        notification_key = "saved_parameter"
+                    else:
+                        self._parameter_service.update_parameter(
+                            parameter.id,
+                            name_input.value or "",
+                            unit_input.value or "",
+                            description_input.value,
+                            chart_min_input.value,
+                            chart_max_input.value,
+                        )
+                        notification_key = "updated_parameter"
+                except (NotFoundError, ValidationError) as error:
                     self._on_error(error)
                     return
                 dialog.close()
-                ui.notify(self._t("saved_parameter"), type="positive")
+                ui.notify(self._t(notification_key), type="positive")
                 self._on_saved()
 
             with ui.row().classes("justify-end"):

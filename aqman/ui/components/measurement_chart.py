@@ -40,8 +40,16 @@ def _measurement_chart_options(
         "yAxis": {
             "type": "value",
             "name": f"{parameter.name} ({parameter.unit})",
-            "min": 0,
-            "max": "dataMax",
+            "min": (
+                parameter.chart_min_value
+                if parameter.chart_min_value is not None
+                else 0
+            ),
+            "max": (
+                parameter.chart_max_value
+                if parameter.chart_max_value is not None
+                else "dataMax"
+            ),
             "axisLine": {"lineStyle": {"color": "#9db59f"}},
             "splitLine": {"lineStyle": {"color": "rgba(168, 196, 168, 0.2)"}},
         },

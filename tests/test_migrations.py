@@ -2,7 +2,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+import pytest
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from aqman.migrations import upgrade_database
 
@@ -146,3 +148,76 @@ def test_fertilizer_default_target_migration_backfills_existing_fertilizers(
     engine.dispose()
 
     assert target == 5.0
+
+
+def test_parameter_chart_scale_migration_keeps_existing_parameters_unbounded(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'parameter-chart-scale.sqlite3'}"
+    project_root = Path(__file__).resolve().parents[1]
+    config = _alembic_config(database_url, project_root)
+    command.upgrade(config, "0006_fertilizer_default_target")
+
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO parameters (id, name, unit, description)
+                VALUES (1, 'NO3', 'mg/L', 'Nitrate')
+                """
+            )
+        )
+    engine.dispose()
+
+    upgrade_database(database_url, project_root)
+
+    engine = create_engine(database_url)
+    with engine.connect() as connection:
+        bounds = connection.execute(
+            text(
+                """
+                SELECT chart_min_value, chart_max_value
+                FROM parameters
+                WHERE id = 1
+                """
+            )
+        ).one()
+    engine.dispose()
+
+    assert bounds == (None, None)
+
+    command.downgrade(config, "0006_fertilizer_default_target")
+
+    engine = create_engine(database_url)
+    parameter_columns = {
+        column["name"] for column in inspect(engine).get_columns("parameters")
+    }
+    engine.dispose()
+
+    assert "chart_min_value" not in parameter_columns
+    assert "chart_max_value" not in parameter_columns
+
+
+def test_parameter_chart_scale_migration_rejects_reversed_bounds(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'parameter-chart-scale-check.sqlite3'}"
+    project_root = Path(__file__).resolve().parents[1]
+    config = _alembic_config(database_url, project_root)
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    with pytest.raises(IntegrityError, match="ck_parameters_chart_scale_order"):
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO parameters (
+                        name, unit, chart_min_value, chart_max_value
+                    )
+                    VALUES ('Invalid', 'unit', 10, 5)
+                    """
+                )
+            )
+    engine.dispose()

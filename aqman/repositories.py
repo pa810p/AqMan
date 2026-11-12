@@ -78,8 +78,16 @@ def add_parameter(
     name: str,
     unit: str,
     description: str | None,
+    chart_min_value: float | None = None,
+    chart_max_value: float | None = None,
 ) -> Parameter:
-    parameter = Parameter(name=name, unit=unit, description=description)
+    parameter = Parameter(
+        name=name,
+        unit=unit,
+        description=description,
+        chart_min_value=chart_min_value,
+        chart_max_value=chart_max_value,
+    )
     session.add(parameter)
     session.flush()
     return parameter
