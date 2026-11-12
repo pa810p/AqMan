@@ -348,7 +348,9 @@ def test_build_ui_callbacks_navigate_select_and_save_records(ui_assembly) -> Non
     _click_button(fake_ui, "🇵🇱")
     assert fake_ui.navigation == ["/?lang=pl"]
 
+    aquarium_label_count = fake_ui.labels.count("Planted tank")
     _click_button(fake_ui, "Open aquarium")
+    assert fake_ui.labels.count("Planted tank") == aquarium_label_count + 3
     assert instances["ActivityHistory"][0].refresh_calls == 2
     assert instances["AquariumCharts"][0].refresh_calls == 2
     assert instances["MeasurementForm"][0].datetime_refresh_calls == 1

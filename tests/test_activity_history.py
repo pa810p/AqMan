@@ -331,11 +331,21 @@ def test_refresh_renders_daily_rows_slots_and_edit_handlers(monkeypatch) -> None
         "fertilizer-application-14",
     }
     assert set(table.slots) == {
+        "body-cell",
         "body-cell-parameter_5",
         "body-cell-fertilizer_8",
         "body-cell-water_changes",
         "body-cell-notes",
     }
+    assert "Copy row to clipboard" in table.slots["body-cell"]
+    assert (
+        '@click="$event.view.navigator.clipboard.writeText(props.row.clipboard_text)"'
+        in table.slots["body-cell"]
+    )
+    assert "Copy row to clipboard" in table.slots["body-cell-parameter_5"]
+    assert "Copy row to clipboard" in table.slots["body-cell-fertilizer_8"]
+    assert "Copy row to clipboard" in table.slots["body-cell-water_changes"]
+    assert "Copy row to clipboard" in table.slots["body-cell-notes"]
     assert "measurement-edit-click" in table.handlers
     assert "fertilizer-application-edit-click" in table.handlers
     assert "water-change-edit-click" in table.handlers
@@ -492,6 +502,83 @@ def test_history_formats_water_change_without_description_and_note_previews() ->
     assert history._note_preview("  short   note ") == "short note"
     assert history._note_preview("one two three four five six seven eight") == (
         "one two three four five six…"
+    )
+
+
+def test_clipboard_row_text_includes_only_populated_activity_values() -> None:
+    ph = Parameter(id=1, name="PH", unit="pH")
+    nitrate = Parameter(id=2, name="NO₃", unit="ppm")
+    phosphate = Parameter(id=3, name="PO₄", unit="ppm")
+    measurements = {
+        1: (
+            Measurement(
+                id=1,
+                aquarium_id=3,
+                timestamp=datetime(2026, 10, 30, 10, tzinfo=timezone.utc),
+                parameter_id=1,
+                value=6.5,
+                parameter=ph,
+            ),
+        ),
+        2: (
+            Measurement(
+                id=2,
+                aquarium_id=3,
+                timestamp=datetime(2026, 10, 30, 11, tzinfo=timezone.utc),
+                parameter_id=2,
+                value=7,
+                parameter=nitrate,
+            ),
+        ),
+        3: (
+            Measurement(
+                id=3,
+                aquarium_id=3,
+                timestamp=datetime(2026, 10, 30, 12, tzinfo=timezone.utc),
+                parameter_id=3,
+                value=0.2,
+                parameter=phosphate,
+            ),
+        ),
+    }
+    fertilizer = Fertilizer(id=8, name="EasyLife Nitro", dose_ml_per_100l=5)
+    application = FertilizerApplication(
+        id=4,
+        timestamp=datetime(2026, 10, 30, 13, tzinfo=timezone.utc),
+        aquarium_id=3,
+        fertilizer_id=8,
+        actual_dose_ml=20,
+        fertilizer=fertilizer,
+    )
+    water_change = WaterChange(
+        id=5,
+        aquarium_id=3,
+        timestamp=datetime(2026, 10, 30, 14, tzinfo=timezone.utc),
+        source=WaterSource.RO,
+        volume_liters=10,
+    )
+    note = Note(
+        id=6,
+        aquarium_id=3,
+        timestamp=datetime(2026, 10, 30, 15, tzinfo=timezone.utc),
+        content="here are notes",
+    )
+    day = DailyAquariumHistory(
+        day=date(2026, 10, 30),
+        measurements=measurements,
+        water_changes=(water_change,),
+        notes=(note,),
+        fertilizer_applications=(application,),
+    )
+    history = ActivityHistory.__new__(ActivityHistory)
+    history._language = "en"
+    history._water_source_labels = {WaterSource.RO: "RO"}
+
+    text = history._clipboard_row_text(day, [1, 2, 3, 4], [8])
+
+    assert text == (
+        "PH=6.5; NO₃=7; PO₄=0.2; Water Change=10L RO; "
+        "EasyLife Nitro=20ml; Notes=here are notes"
     )
 
 

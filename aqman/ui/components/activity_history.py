@@ -76,6 +76,16 @@ class ActivityHistory:
                 row_key="id",
                 pagination=self._page_size,
             ).classes("w-full")
+            history_table.add_slot(
+                "body-cell",
+                self._copy_row_context_menu(
+                    """
+                    <q-td :props="props">{{ props.value }}
+                        __CONTEXT_MENU__
+                    </q-td>
+                    """
+                ),
+            )
             self._add_measurement_slots(history_table, parameter_ids)
             self._add_fertilizer_slots(history_table, fertilizer_ids)
             self._add_record_slots(history_table)
@@ -213,6 +223,9 @@ class ActivityHistory:
                 for water_change in day.water_changes
             ],
             "notes": note_links,
+            "clipboard_text": self._clipboard_row_text(
+                day, parameter_ids, fertilizer_ids
+            ),
         }
         for parameter_id in parameter_ids:
             row[f"parameter_{parameter_id}"] = [
@@ -232,6 +245,86 @@ class ActivityHistory:
                 if application.fertilizer_id == fertilizer_id
             ]
         return row
+
+    def _clipboard_row_text(
+        self,
+        day: DailyAquariumHistory,
+        parameter_ids: list[int],
+        fertilizer_ids: list[int],
+    ) -> str:
+        entries: list[str] = []
+        for parameter_id in parameter_ids:
+            measurements = day.measurements.get(parameter_id, ())
+            if measurements:
+                parameter_name = measurements[0].parameter.name
+                values = ", ".join(
+                    f"{measurement.value:g}" for measurement in measurements
+                )
+                entries.append(f"{parameter_name}={values}")
+
+        if (co2_value := self._co2_for_day(day)) is not None:
+            entries.append(f"CO₂={co2_value:.1f}")
+
+        if day.water_changes:
+            water_change_values = []
+            for water_change in day.water_changes:
+                value = (
+                    f"{water_change.volume_liters:g}L "
+                    f"{self._water_source_labels[water_change.source]}"
+                )
+                if water_change.description:
+                    value += f" ({water_change.description})"
+                water_change_values.append(value)
+            entries.append(f"Water Change={', '.join(water_change_values)}")
+
+        for fertilizer_id in fertilizer_ids:
+            applications = [
+                application
+                for application in day.fertilizer_applications
+                if application.fertilizer_id == fertilizer_id
+            ]
+            if applications:
+                fertilizer_name = applications[0].fertilizer.name
+                doses = ", ".join(
+                    f"{application.actual_dose_ml:g}ml"
+                    for application in applications
+                )
+                entries.append(f"{fertilizer_name}={doses}")
+
+        note_contents = [note.content for note in day.notes if note.content.strip()]
+        note_contents.extend(
+            measurement.note
+            for measurements in day.measurements.values()
+            for measurement in measurements
+            if measurement.note and measurement.note.strip()
+        )
+        note_contents.extend(
+            application.notes
+            for application in day.fertilizer_applications
+            if application.notes and application.notes.strip()
+        )
+        if note_contents:
+            entries.append(f"Notes={' | '.join(note_contents)}")
+
+        return "; ".join(entries)
+
+    def _copy_row_context_menu(self, cell_template: str) -> str:
+        return cell_template.replace(
+            "__CONTEXT_MENU__",
+            f"""
+            <q-menu context-menu>
+                <q-list dense>
+                    <q-item
+                        clickable
+                        v-close-popup
+                        @click="$event.view.navigator.clipboard.writeText(props.row.clipboard_text)"
+                    >
+                        <q-item-section>{self._t("copy_row_to_clipboard")}</q-item-section>
+                    </q-item>
+                </q-list>
+            </q-menu>
+            """,
+        )
 
     @staticmethod
     def _co2_for_day(day: DailyAquariumHistory) -> float | None:
@@ -292,12 +385,15 @@ class ActivityHistory:
                     </a>
                     <span v-if="index + 1 < props.row.__COLUMN__.length">, </span>
                 </span>
+                __CONTEXT_MENU__
             </q-td>
             """
             history_table.add_slot(
                 f"body-cell-{column_name}",
-                measurement_slot.replace("__COLUMN__", column_name).replace(
-                    "__EDIT_LABEL__", self._t("edit_measurement")
+                self._copy_row_context_menu(
+                    measurement_slot.replace("__COLUMN__", column_name).replace(
+                        "__EDIT_LABEL__", self._t("edit_measurement")
+                    )
                 ),
             )
 
@@ -306,7 +402,8 @@ class ActivityHistory:
             column_name = f"fertilizer_{fertilizer_id}"
             history_table.add_slot(
                 f"body-cell-{column_name}",
-                """
+                self._copy_row_context_menu(
+                    """
             <q-td :props="props">
                 <span
                     v-for="(application, index) in props.row.__COLUMN__"
@@ -322,16 +419,21 @@ class ActivityHistory:
                     </a>
                     <span v-if="index + 1 < props.row.__COLUMN__.length">; </span>
                 </span>
+                __CONTEXT_MENU__
             </q-td>
             """
-                .replace("__COLUMN__", column_name)
-                .replace("__EDIT_LABEL__", self._t("edit_fertilizer_application")),
+                    .replace("__COLUMN__", column_name)
+                    .replace(
+                        "__EDIT_LABEL__", self._t("edit_fertilizer_application")
+                    )
+                ),
             )
 
     def _add_record_slots(self, history_table) -> None:
         history_table.add_slot(
             "body-cell-water_changes",
-            """
+            self._copy_row_context_menu(
+                """
             <q-td :props="props">
                 <span
                     v-for="(waterChange, index) in props.row.water_changes"
@@ -347,12 +449,15 @@ class ActivityHistory:
                     </a>
                     <span v-if="index + 1 < props.row.water_changes.length">; </span>
                 </span>
+                __CONTEXT_MENU__
             </q-td>
-            """.replace("__EDIT_LABEL__", self._t("edit_water_change")),
+                """.replace("__EDIT_LABEL__", self._t("edit_water_change"))
+            ),
         )
         history_table.add_slot(
             "body-cell-notes",
-            """
+            self._copy_row_context_menu(
+                """
             <q-td :props="props">
                 <span v-for="(note, index) in props.row.notes" :key="note.id">
                     <a
@@ -367,8 +472,10 @@ class ActivityHistory:
                     </a>
                     <span v-if="index + 1 < props.row.notes.length"> · </span>
                 </span>
+                __CONTEXT_MENU__
             </q-td>
-            """,
+                """
+            ),
         )
 
     def _connect_edit_handlers(self, history_table) -> None:
