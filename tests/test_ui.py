@@ -441,6 +441,8 @@ def test_opening_aquarium_detail_tab_refreshes_entry_form_datetimes(ui_assembly)
     fake_ui.tabs_element.value_change_callback(SimpleNamespace(value="Dashboard"))
     assert instances["MeasurementForm"][0].datetime_refresh_calls == 0
     assert instances["FertilizerApplicationForm"][0].datetime_refresh_calls == 0
+    assert instances["NoteForm"][0].datetime_refresh_calls == 0
+    assert instances["WaterChangeForm"][0].datetime_refresh_calls == 0
 
     fake_ui.tabs_element.value_change_callback(
         SimpleNamespace(value="Aquarium details")
@@ -448,6 +450,8 @@ def test_opening_aquarium_detail_tab_refreshes_entry_form_datetimes(ui_assembly)
 
     assert instances["MeasurementForm"][0].datetime_refresh_calls == 1
     assert instances["FertilizerApplicationForm"][0].datetime_refresh_calls == 1
+    assert instances["NoteForm"][0].datetime_refresh_calls == 1
+    assert instances["WaterChangeForm"][0].datetime_refresh_calls == 1
 
 
 def test_build_ui_reports_missing_selection_and_missing_aquarium(ui_assembly) -> None:

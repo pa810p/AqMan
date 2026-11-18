@@ -77,5 +77,8 @@ class WaterChangeForm:
         self._description.value = ""
         self._datetime.set_to_now()
 
+    def refresh_datetime(self) -> None:
+        self._datetime.set_to_now()
+
     def _t(self, key: str) -> str:
         return translate(self._language, key)

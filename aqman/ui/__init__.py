@@ -229,13 +229,13 @@ def build_ui(
                         show_time=show_time_in_datetime_picker,
                     )
 
-                    NoteForm(
+                    note_form = NoteForm(
                         language,
                         on_save=lambda form: save_note(form),
                         show_time=show_time_in_datetime_picker,
                     )
 
-                    WaterChangeForm(
+                    water_change_form = WaterChangeForm(
                         language,
                         {
                             source.value: t(translation_key)
@@ -313,6 +313,8 @@ def build_ui(
     def refresh_form_datetimes() -> None:
         measurement_form.refresh_datetime()
         fertilizer_application_form.refresh_datetime()
+        note_form.refresh_datetime()
+        water_change_form.refresh_datetime()
 
     def edit_current_aquarium() -> None:
         try:

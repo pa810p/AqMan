@@ -29,6 +29,18 @@ def test_water_change_form_values_save_callback_and_reset(monkeypatch):
     assert form._datetime.value.tzinfo is not None
 
 
+def test_water_change_form_refreshes_datetime(monkeypatch):
+    install_ui(monkeypatch, water_change_form_module)
+    install_datetime_picker(monkeypatch, water_change_form_module)
+    form = WaterChangeForm("en", {}, lambda _: None)
+    refreshed = []
+    form._datetime.set_to_now = lambda: refreshed.append(True)
+
+    form.refresh_datetime()
+
+    assert refreshed == [True]
+
+
 @pytest.mark.parametrize(
     ("source", "volume", "message"),
     [

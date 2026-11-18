@@ -26,3 +26,15 @@ def test_note_form_values_save_callback_and_reset(monkeypatch):
     assert form._category.value == ""
     assert form._content.value == ""
     assert form._datetime.value.tzinfo is not None
+
+
+def test_note_form_refreshes_datetime(monkeypatch):
+    install_ui(monkeypatch, note_form_module)
+    install_datetime_picker(monkeypatch, note_form_module)
+    form = NoteForm("en", lambda _: None)
+    refreshed = []
+    form._datetime.set_to_now = lambda: refreshed.append(True)
+
+    form.refresh_datetime()
+
+    assert refreshed == [True]
